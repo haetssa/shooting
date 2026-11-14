@@ -121,6 +121,16 @@ input, select { user-select: text; -webkit-user-select: text; touch-action: mani
   border: 3px solid #1c1a2b; border-radius: 12px; background: #fff; color: #1c1a2b;
 }
 .hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* 타이틀: 왼쪽 포스터 + 오른쪽 메뉴 (가로 화면) */
+.title-wrap { display: flex; align-items: center; justify-content: center; gap: 22px; max-width: 100%; }
+.title-side { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; }
+.title-side .big { padding: 11px 26px; font-size: 18px; }
+.title-side .row { max-width: 340px; }
+#poster { display: block; flex: none; border-radius: 22px; box-shadow: 0 6px 0 #0c0e18; }
+#ogshot { position: fixed; inset: 0; z-index: 100; background: #141826; }
+@media (max-width: 620px) { .title-wrap { flex-direction: column; gap: 10px; } }
 
 /* 스크롤 화면 */
 .overlay.scroll { justify-content: flex-start; overflow-y: auto; touch-action: pan-y; gap: 8px; padding-top: calc(10px + env(safe-area-inset-top)); }
@@ -262,6 +272,9 @@ table.stats td:first-child { text-align: left; font-weight: 700; }
   .overlay h1 { font-size: 28px; }
   .overlay { gap: 10px; }
   .big { padding: 9px 34px; font-size: 18px; }
+  .title-side { gap: 8px; }
+  .title-side .big { padding: 8px 20px; font-size: 16px; }
+  .menu { gap: 8px; }
   #chatbar { bottom: calc(8px + env(safe-area-inset-bottom)); }
 }
 

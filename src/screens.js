@@ -5,6 +5,7 @@ import { Online } from './net/online.js';
 import { cleanChat } from './net/filter.js';
 import { skillOf, blockReason, manaCost } from './skills.js';
 import { mulberry32, VERSION, latestVersion } from './util.js';
+import { drawPoster } from './poster.js';
 
 const STORE_KEY = 'pg.profile.v1';
 const SCREENS = ['title', 'name', 'setup', 'help', 'dex', 'lobby', 'room', 'over', 'stats'];
@@ -37,6 +38,7 @@ export class Screens {
     this.lastStartSeed = null;
     this.bind();
     this.updateSoundLabels();
+    window.addEventListener('resize', () => { if (!$('screen-title').classList.contains('hidden')) this.renderPoster(); });
     if (this.store.nickname) this.show('title');
     else this.showName(true);
   }
@@ -109,7 +111,33 @@ export class Screens {
 
   show(name) {
     for (const s of SCREENS) $(`screen-${s}`).classList.toggle('hidden', s !== name);
-    if (name === 'title') $('my-name').textContent = this.nick;
+    if (name === 'title') {
+      $('my-name').textContent = this.nick;
+      this.renderPoster();
+    }
+  }
+
+  // 타이틀 포스터: 화면 높이에 맞춰 크기를 정하고 그린다 (가로 화면은 메뉴 옆, 좁으면 위)
+  renderPoster() {
+    const W = window.innerWidth, H = window.innerHeight, narrow = W <= 620;
+    let h = narrow ? Math.min(H * 0.34, 220) : Math.min(H * 0.82, 380);
+    let w = h * 1.4;
+    const maxW = narrow ? W - 32 : W - 360;
+    if (w > maxW) { w = Math.max(200, maxW); h = w / 1.4; }
+    const c = $('poster');
+    c.style.width = `${Math.round(w)}px`;
+    c.style.height = `${Math.round(h)}px`;
+    drawPoster(c, this.g, w, h, Math.min(window.devicePixelRatio || 1, 2));
+  }
+
+  // 공유 미리보기 이미지(1200x630) 만들기용: ?ogimage
+  showOgImage() {
+    const c = document.createElement('canvas');
+    c.id = 'ogshot';
+    c.style.width = '1200px';
+    c.style.height = '630px';
+    document.body.appendChild(c);
+    drawPoster(c, this.g, 1200, 630, 1);
   }
 
   devScreen(name) {
@@ -118,6 +146,7 @@ export class Screens {
     else if (name === 'dex') { this.renderDex(); this.show('dex'); }
     else if (name === 'lobby') this.enterOnline();
     else if (name === 'stats') this.showStats();
+    else if (name === 'ogimage') this.showOgImage();
     else if (SCREENS.includes(name)) this.show(name);
   }
 

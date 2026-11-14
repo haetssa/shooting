@@ -6,7 +6,15 @@
   <meta name="theme-color" content="#141826">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>포격 게임 (가제)</title>
+  <title>인플루언쏴</title>
+  <meta name="description" content="유명인 패러디 캐릭터들의 포격 대전! 링크만 누르면 바로 시작">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="인플루언쏴">
+  <meta property="og:description" content="유명인 패러디 캐릭터들의 포격 대전! 링크만 누르면 바로 시작">
+  <meta property="og:image" content="https://haetssa.github.io/shooting/assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:url" content="https://haetssa.github.io/shooting/">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -53,22 +61,27 @@
 
   <!-- 타이틀 -->
   <div id="screen-title" class="overlay hidden">
-    <h1>포격 게임 <small>(가제)</small></h1>
-    <div class="profile">
-      <span class="label">닉네임</span>
-      <b id="my-name">-</b>
-      <button id="btn-edit-name" class="chip small">변경</button>
-    </div>
-    <div class="menu">
-      <button id="btn-online" class="big">🌐 온라인 대전</button>
-      <button id="btn-play-local" class="big alt">🎮 혼자 · 한 화면 대전</button>
-      <button id="btn-tutorial" class="big tut">🎓 튜토리얼 (처음이라면!)</button>
-    </div>
-    <div class="row">
-      <button id="btn-help" class="chip small">📖 게임 방법</button>
-      <button id="btn-dex" class="chip small">🧑‍🎤 캐릭터 도감</button>
-      <button id="btn-music" class="chip small">🎵 배경음</button>
-      <button id="btn-sfx" class="chip small">🔊 효과음</button>
+    <div class="title-wrap">
+      <canvas id="poster" role="img" aria-label="인플루언쏴 - 유명인 패러디 포격 대전"></canvas>
+      <div class="title-side">
+        <h1 class="sr-only">인플루언쏴</h1>
+        <div class="profile">
+          <span class="label">닉네임</span>
+          <b id="my-name">-</b>
+          <button id="btn-edit-name" class="chip small">변경</button>
+        </div>
+        <div class="menu">
+          <button id="btn-online" class="big">🌐 온라인 대전</button>
+          <button id="btn-play-local" class="big alt">🎮 혼자 · 한 화면 대전</button>
+          <button id="btn-tutorial" class="big tut">🎓 튜토리얼 (처음이라면!)</button>
+        </div>
+        <div class="row wrap">
+          <button id="btn-help" class="chip small">📖 게임 방법</button>
+          <button id="btn-dex" class="chip small">🧑‍🎤 캐릭터 도감</button>
+          <button id="btn-music" class="chip small">🎵 배경음</button>
+          <button id="btn-sfx" class="chip small">🔊 효과음</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -200,7 +213,7 @@
   <script>
   (async () => {
     const MODULES = ['main', 'screens', 'util', 'sprites', 'turn', 'wind', 'camera', 'skills', 'audio', 'effects', 'projectiles',
-      'terrain', 'background', 'roster', 'physics', 'bot', 'character', 'ui', 'input', 'tutorial', 'net/online', 'net/sync', 'net/filter'];
+      'terrain', 'background', 'roster', 'physics', 'bot', 'character', 'ui', 'input', 'tutorial', 'poster', 'net/online', 'net/sync', 'net/filter'];
     let v = 'dev';
     try { v = (await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json()).v || 'dev'; } catch (e) {}
     window.APP_VERSION = v;
