@@ -1,0 +1,24 @@
+{
+  "turnTime": 30,
+  "maxPlayers": 6,
+  "defaultPlayers": 4,
+  "gravity": 620,
+  "maxShotSpeed": 1050,
+  "powerChargeTime": 1.6,
+  "settleDelay": 0.7,
+  "maxFallSpeed": 1400,
+  "aim": { "min": -20, "max": 90, "default": 45, "dragSensitivity": 0.35, "keySpeed": 45 },
+  "wind": { "max": 10, "accelPerUnit": 16, "shiftTime": 1.5, "gustAmp": 1.8, "gustSpeed": 0.7, "calmChance": 0.15 },
+  "move": { "speed": 75, "maxSlope": 2.2, "fuelPerPx": 0.5, "jumpVx": 120, "jumpVy": 290, "jumpFuelCost": 18 },
+  "fall": { "safeHeight": 130, "damagePerPx": 1.2 },
+  "damage": { "directHitMult": 1.2, "splashMin": 0.25, "knockback": 260 },
+  "ult": { "dealRate": 0.08, "takeRate": 0.05 },
+  "audio": { "music": { "menu": null, "battle": null } },
+  "hiddenChance": 0.05,
+  "online": { "maxConcurrent": 90, "roomMax": 6, "snapshotHz": 10 },
+  "chat": {
+    "maxLength": 60,
+    "cooldown": 1.2,
+    "macros": ["안녕하세요!", "나이스!", "아깝다 ㅠㅠ", "바람 미쳤네", "ㅋㅋㅋㅋ", "한 판 더?", "잘했어요 👍", "살려줘!"]
+  }
+}

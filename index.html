@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#141826">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>포격 게임 (가제)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- 게임 중 조작 -->
+  <div id="controls" class="hidden">
+    <div class="topbtns">
+      <button id="btn-sound" class="ctl round" aria-label="소리 켜기/끄기">🔊</button>
+      <button id="btn-chat" class="ctl round" aria-label="채팅">💬</button>
+      <button id="btn-exit" class="ctl round" aria-label="나가기">🚪</button>
+    </div>
+    <div class="pad left">
+      <button id="btn-left" class="ctl" aria-label="왼쪽">◀</button>
+      <button id="btn-right" class="ctl" aria-label="오른쪽">▶</button>
+      <button id="btn-jump" class="ctl small">점프</button>
+    </div>
+    <div class="pad right">
+      <div class="skills">
+        <button id="btn-skill1" class="ctl skill">스킬1</button>
+        <button id="btn-skill2" class="ctl skill">스킬2</button>
+        <button id="btn-ult" class="ctl skill ult">궁극기</button>
+      </div>
+      <button id="btn-fire" class="ctl fire">발사</button>
+    </div>
+    <div id="chatbar" class="hidden">
+      <div class="chatrow">
+        <input id="chat-input" maxlength="60" placeholder="메시지 입력" autocomplete="off">
+        <button id="btn-chat-send" class="chip small">보내기</button>
+        <button id="btn-chat-close" class="chip small">닫기</button>
+      </div>
+      <div id="chat-macros" class="macros"></div>
+    </div>
+    <div id="skill-tip" class="hidden"></div>
+  </div>
+
+  <!-- 타이틀 -->
+  <div id="screen-title" class="overlay hidden">
+    <h1>포격 게임 <small>(가제)</small></h1>
+    <div class="profile">
+      <span class="label">닉네임</span>
+      <b id="my-name">-</b>
+      <button id="btn-edit-name" class="chip small">변경</button>
+    </div>
+    <div class="menu">
+      <button id="btn-online" class="big">🌐 온라인 대전</button>
+      <button id="btn-play-local" class="big alt">🎮 혼자 · 한 화면 대전</button>
+    </div>
+    <div class="row">
+      <button id="btn-help" class="chip small">📖 게임 방법</button>
+      <button id="btn-dex" class="chip small">🧑‍🎤 캐릭터 도감</button>
+      <button id="btn-music" class="chip small">🎵 배경음</button>
+      <button id="btn-sfx" class="chip small">🔊 효과음</button>
+    </div>
+  </div>
+
+  <!-- 닉네임 -->
+  <div id="screen-name" class="overlay hidden">
+    <h2>닉네임 설정</h2>
+    <p id="name-hint" class="sub"></p>
+    <input id="name-input" class="text-input" maxlength="10" placeholder="닉네임 (최대 10자)" autocomplete="off">
+    <button id="btn-name-ok" class="big">확인</button>
+  </div>
+
+  <!-- 혼자 · 한 화면 대전 설정 -->
+  <div id="screen-setup" class="overlay scroll hidden">
+    <div class="setup-head">
+      <button id="btn-back" class="chip small">← 뒤로</button>
+      <div id="setup-count" class="row">
+        <span class="label">인원</span>
+        <button class="chip" data-players="2">2명</button>
+        <button class="chip" data-players="3">3명</button>
+        <button class="chip" data-players="4">4명</button>
+      </div>
+      <button id="btn-start" class="big slim">시작</button>
+    </div>
+    <div class="maprow"><span class="label">맵</span><div id="setup-maps" class="row wrap"></div></div>
+    <p id="setup-map-desc" class="sub"></p>
+    <p class="sub">이름과 캐릭터를 고르세요 · '사람' 버튼을 누르면 봇으로 바뀌어요 · 카드의 ⓘ 를 누르면 캐릭터 설명</p>
+    <div id="player-rows"></div>
+  </div>
+
+  <!-- 게임 방법 -->
+  <div id="screen-help" class="overlay scroll hidden">
+    <div class="setup-head"><button id="btn-help-back" class="chip small">← 뒤로</button><h2>게임 방법</h2></div>
+    <div class="helpdoc">
+      <section><h3>🎯 목표</h3><p>차례대로 포탄을 던져 상대를 쓰러뜨리세요. 마지막까지 살아남은 사람이 승리! 섬 아래 빈 공간으로 떨어지면 즉시 탈락이에요.</p></section>
+      <section><h3>🔄 내 차례</h3><p>한 턴은 <b>30초</b>. 이동 → 조준 → 발사 순서로 진행해요. 이동은 아래쪽 <b>연료</b> 만큼만 할 수 있어요. 발사하면 턴이 끝나요.</p></section>
+      <section><h3>📱 조작 (모바일)</h3><p>◀ ▶ 이동 · 점프 · <b>화면 위아래 드래그 = 각도</b> · <b>발사 버튼을 누르고 있다가 떼기 = 파워</b> (오래 누를수록 멀리) · 두 손가락 = 화면 이동/확대</p></section>
+      <section><h3>⌨️ 조작 (PC)</h3><p>←→ 이동 · ↑↓ 또는 마우스 드래그 = 각도 · 스페이스 = 파워 · W = 점프 · 1/2/3 = 스킬1/스킬2/궁극기 · 우클릭 드래그 = 화면 이동 · 휠 = 확대</p></section>
+      <section><h3>🌬️ 바람</h3><p>위쪽 바람 표시의 화살표 방향으로 포탄이 밀려요. 바람은 <b>실시간으로 계속 변해요</b>. 숫자가 클수록 세요.</p></section>
+      <section><h3>✨ 스킬</h3><p>오른쪽 스킬 버튼을 누르면 <b>다음 발사에 적용</b>돼요 (다시 누르면 취소). 한 턴에 하나만, 쓰고 나면 몇 턴 기다려야 해요. 버튼을 <b>길게 누르면 설명</b>이 나와요.</p></section>
+      <section><h3>💜 궁극기</h3><p>피해를 주거나 받으면 게이지가 차요 (플레이어 목록의 보라색 줄). <b>100이 되면 궁극기 버튼이 빛나요 → 누르고 발사!</b></p></section>
+      <section><h3>💥 피해</h3><p>폭발 중심에 가까울수록 큰 피해, 직접 맞히면 보너스. 높은 곳에서 떨어지면 낙하 피해가 있어요. 폭발하면 땅이 파여요.</p></section>
+      <section><h3>🗺️ 맵 규칙</h3><p>도시: 기본 · 화성 기지: 중력 약함 · 설원: 강풍 · 사막 유적: 구멍이 크게 파임 · 우주 정거장: 중력 매우 약함, 바람 없음</p></section>
+      <section><h3>🎲 랜덤 &amp; 히든</h3><p>캐릭터를 랜덤으로 고르면 낮은 확률로 <b>히든 캐릭터</b>가 나와요!</p></section>
+    </div>
+  </div>
+
+  <!-- 캐릭터 도감 -->
+  <div id="screen-dex" class="overlay scroll hidden">
+    <div class="setup-head"><button id="btn-dex-back" class="chip small">← 뒤로</button><h2>캐릭터 도감</h2></div>
+    <div id="dex-grid"></div>
+  </div>
+
+  <!-- 온라인 로비 -->
+  <div id="screen-lobby" class="overlay scroll hidden">
+    <div class="setup-head">
+      <button id="btn-lobby-back" class="chip small">← 나가기</button>
+      <h2>온라인 로비</h2>
+      <span id="lobby-count" class="sub"></span>
+      <button id="btn-create-room" class="big slim">+ 방 만들기</button>
+    </div>
+    <div id="room-list"></div>
+  </div>
+
+  <!-- 온라인 방 -->
+  <div id="screen-room" class="overlay scroll hidden">
+    <div class="setup-head">
+      <button id="btn-room-leave" class="chip small">← 방 나가기</button>
+      <div class="roomhead"><b id="room-title"></b><span id="room-info" class="sub"></span></div>
+      <button id="btn-ready" class="big slim">준비</button>
+      <button id="btn-go" class="big slim">GO!</button>
+    </div>
+    <div class="roomgrid">
+      <div class="roomleft">
+        <div id="room-players"></div>
+        <div class="label">내 캐릭터</div>
+        <div id="room-cards" class="cards"></div>
+        <p id="room-char-desc" class="sub left"></p>
+        <div id="room-maps" class="row wrap"></div>
+      </div>
+      <div class="roomchat">
+        <div id="room-chat-log"></div>
+        <div class="chatrow">
+          <input id="room-chat-input" maxlength="60" placeholder="메시지 입력" autocomplete="off">
+          <button id="btn-room-send" class="chip small">보내기</button>
+        </div>
+        <div id="room-macros" class="macros"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div id="screen-over" class="overlay hidden">
+    <h1 id="over-title">승리!</h1>
+    <p id="over-sub" class="sub"></p>
+    <button id="btn-restart" class="big">처음으로</button>
+  </div>
+
+  <!-- 공용 모달 / 알림 -->
+  <div id="modal" class="overlay hidden">
+    <div id="modal-box">
+      <h2 id="modal-title"></h2>
+      <div id="modal-body"></div>
+      <div id="modal-buttons" class="row"></div>
+    </div>
+  </div>
+  <div id="toast" class="hidden"></div>
+
+  <div id="load-error" class="overlay hidden">
+    <h2>게임 데이터를 불러오지 못했어요</h2>
+    <p class="sub">파일을 더블클릭해서 열면 동작하지 않아요. VS Code의 Live Server(Go Live)로 열어 주세요.</p>
+    <pre id="load-error-detail"></pre>
+  </div>
+
+  <div id="rotate" class="overlay">
+    <div class="rotate-icon">📱</div>
+    <p>가로 화면으로 돌려 주세요</p>
+    <p class="sub">PC라면 창을 가로로 넓혀 주세요</p>
+  </div>
+
+  <!-- 부트: version.json 의 버전을 모든 파일 주소에 ?v= 로 붙여서, 업데이트하면 예전 캐시 대신 새 파일을 받게 한다.
+       src 에 새 .js 파일을 추가하면 아래 MODULES 목록에도 넣는다 (빠뜨려도 동작은 함, 캐시 무효화만 안 됨) -->
+  <script>
+  (async () => {
+    const MODULES = ['main', 'screens', 'util', 'sprites', 'turn', 'wind', 'camera', 'skills', 'audio', 'effects', 'projectiles',
+      'terrain', 'background', 'roster', 'physics', 'bot', 'character', 'ui', 'input', 'net/online', 'net/sync', 'net/filter'];
+    let v = 'dev';
+    try { v = (await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json()).v || 'dev'; } catch (e) {}
+    window.APP_VERSION = v;
+    if (v !== 'dev') {
+      const imports = {};
+      for (const m of MODULES) imports[`./src/${m}.js`] = `./src/${m}.js?v=${v}`;
+      const im = document.createElement('script');
+      im.type = 'importmap';
+      im.textContent = JSON.stringify({ imports });
+      document.head.appendChild(im);
+      document.querySelector('link[rel=stylesheet]').href = 'style.css?v=' + v;
+    }
+    import(v === 'dev' ? './src/main.js' : './src/main.js?v=' + v);
+  })();
+  </script>
+</body>
+</html>

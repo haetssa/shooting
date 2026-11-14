@@ -1,0 +1,41 @@
+{
+  "outputDir": "assets/sprites",
+  "targetHeight": 160,
+  "sheets": [
+    {
+      "id": "dorampu",
+      "src": "../캐릭터/트럼프.png",
+      "tolerance": 100,
+      "ignore": [[0.8, 0.9, 1, 1]]
+    },
+    {
+      "id": "simpsonhwang",
+      "src": "../캐릭터/젠슨황.png",
+      "tolerance": 100,
+      "halo": 5,
+      "flip": [15],
+      "ignore": [[0.75, 0.85, 1, 1]],
+      "expected": [4, 4, 4, 4, 3],
+      "anims": {
+        "idle": [0, 1, 2, 3],
+        "walk": [4, 5, 6, 7],
+        "windup": [8, 8, 9, 9],
+        "throw": [9, 10, 10, 11],
+        "hit": [12, 13, 14, 15],
+        "jump": [16, 17, 18]
+      }
+    },
+    {
+      "id": "jaedragon",
+      "src": "../캐릭터/이재용.jpg",
+      "tolerance": 95
+    },
+    {
+      "id": "einstaing",
+      "src": "../캐릭터/아인슈타인.jpg",
+      "tolerance": 95,
+      "flip": [18],
+      "ignore": [[0.75, 0.93, 1, 1]]
+    }
+  ]
+}

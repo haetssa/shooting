@@ -1,0 +1,10 @@
+# 공개 저장소에 올리지 않는 것
+# 원본 스프라이트 시트 (용량 큼, 파일명에 원본 인물 이름 포함) - 로컬/OneDrive에만 보관
+캐릭터/
+# 개발 사양서 (원본 인물 이름 포함) - 로컬에만 보관
+CLAUDE.md
+.claude/
+deploy.bat
+.vscode/
+Thumbs.db
+desktop.ini
