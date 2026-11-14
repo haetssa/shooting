@@ -34,6 +34,48 @@ const SONGS = {
     ],
     leadType: 'square', leadVol: 0.07,
   },
+  // 밝고 신나는 장조 (설원, 사막, 정글)
+  battle2: {
+    bpm: 140,
+    chords: [[60, 'M'], [55, 'M'], [57, 'm'], [53, 'M']],
+    drums: true,
+    arpEvery: 1, arpType: 'square', arpVol: 0.04,
+    arp: [0, 1, 2, 3, 2, 1, 0, 1, 0, 2, 1, 3, 2, 1, 2, 3],
+    bass: [0, 4, 8, 12, 14],
+    melody: [
+      [[0, 2, 2], [2, 3, 2], [4, 2, 2], [6, 1, 2], [8, 2, 4], [12, 3, 4]],
+      [[0, 3, 3], [3, 2, 1], [4, 1, 4], [8, 0, 2], [10, 1, 2], [12, 2, 4]],
+    ],
+    leadType: 'square', leadVol: 0.065,
+  },
+  // 빠르고 긴장감 있는 단조 (야경 도시, 화산)
+  battle3: {
+    bpm: 152,
+    chords: [[52, 'm'], [48, 'M'], [50, 'M'], [47, 'M']],
+    drums: true,
+    arpEvery: 1, arpType: 'sawtooth', arpVol: 0.03,
+    arp: [0, 2, 0, 3, 0, 2, 1, 2, 0, 2, 0, 3, 1, 2, 1, 3],
+    bass: [0, 2, 4, 6, 8, 10, 12, 14],
+    melody: [
+      [[0, 3, 2], [2, 2, 2], [4, 3, 2], [6, 2, 1], [7, 1, 1], [8, 0, 4], [12, 1, 4]],
+      [[0, 1, 2], [2, 2, 2], [4, 3, 4], [8, 2, 2], [10, 1, 2], [12, 0, 4]],
+    ],
+    leadType: 'square', leadVol: 0.06,
+  },
+  // 느리고 몽환적인 (화성, 우주)
+  space: {
+    bpm: 84,
+    chords: [[57, 'm'], [53, 'M'], [55, 'M'], [52, 'm']],
+    drums: false,
+    arpEvery: 1, arpType: 'triangle', arpVol: 0.09,
+    arp: [0, 1, 2, 3, 2, 1, 2, 3, 0, 2, 1, 3, 2, 3, 1, 2],
+    bass: [0, 8],
+    melody: [
+      [[0, 3, 6], [8, 2, 4], [12, 1, 4]],
+      [[0, 2, 4], [4, 3, 4], [8, 1, 8]],
+    ],
+    leadType: 'sine', leadVol: 0.15,
+  },
 };
 
 export class GameAudio {
@@ -208,6 +250,11 @@ export class GameAudio {
         this.tone(110, 0.35 * k, { type: 'sine', vol: 0.7, slide: 35 });
         break;
       }
+      case 'nuke':
+        this.noise(1.6, { filter: 'lowpass', freq: 2200, freqTo: 60, vol: 0.9 });
+        this.tone(90, 1.4, { type: 'sine', vol: 0.8, slide: 25 });
+        this.tone(60, 1.2, { type: 'sawtooth', vol: 0.15, slide: 20, at: t + 0.1 });
+        break;
       case 'void':
         this.tone(500, 0.6, { type: 'sawtooth', vol: 0.12, slide: 50 });
         this.tone(80, 0.6, { type: 'sine', vol: 0.6, slide: 30 });

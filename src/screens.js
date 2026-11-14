@@ -1,18 +1,19 @@
-// 화면(DOM) 관리: 타이틀, 닉네임, 대전 설정, 게임 방법, 캐릭터 도감/상세, 온라인 로비/방, 결과, 게임 중 버튼/채팅
+// 화면(DOM) 관리: 타이틀, 닉네임, 대전 설정, 튜토리얼 시작, 게임 방법, 캐릭터 도감/상세, 온라인 로비/방(강퇴), 결과, 통계, 게임 중 버튼/채팅
 import { RANDOM, visibleIndices, resolveChar } from './roster.js';
 import { BOT_LABELS } from './bot.js';
 import { Online } from './net/online.js';
 import { cleanChat } from './net/filter.js';
-import { skillOf } from './skills.js';
+import { skillOf, blockReason, manaCost } from './skills.js';
 import { mulberry32, VERSION, latestVersion } from './util.js';
 
 const STORE_KEY = 'pg.profile.v1';
-const SCREENS = ['title', 'name', 'setup', 'help', 'dex', 'lobby', 'room', 'over'];
+const SCREENS = ['title', 'name', 'setup', 'help', 'dex', 'lobby', 'room', 'over', 'stats'];
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const TYPE_LABEL = {
   shot: '특수 사격', multi_shot: '다연발', split: '분열', scatter: '흩뿌림', pierce: '관통',
   airstrike: '공중 폭격', build: '지형 생성', teleport: '순간이동', heal: '회복', big_blast: '대폭발',
+  homing: '유도', bounce: '튕김', shield: '보호막', global: '전체 공격',
 };
 
 function loadStore() {
@@ -31,6 +32,7 @@ export class Screens {
     this.roomMeta = null;
     this.roomPlayers = {};
     this.byes = {};
+    this.kicked = {};
     this.chatCool = 0;
     this.lastStartSeed = null;
     this.bind();
@@ -50,6 +52,8 @@ export class Screens {
     // 타이틀
     on('btn-edit-name', () => this.showName(false));
     on('btn-play-local', () => this.showSetup());
+    on('btn-tutorial', () => this.startTutorial());
+    on('btn-stats-back', () => this.show('title'));
     on('btn-online', () => this.enterOnline());
     on('btn-help', () => this.show('help'));
     on('btn-dex', () => { this.renderDex(); this.show('dex'); });
@@ -113,6 +117,7 @@ export class Screens {
     if (name === 'setup') this.showSetup();
     else if (name === 'dex') { this.renderDex(); this.show('dex'); }
     else if (name === 'lobby') this.enterOnline();
+    else if (name === 'stats') this.showStats();
     else if (SCREENS.includes(name)) this.show(name);
   }
 
@@ -252,7 +257,9 @@ export class Screens {
   showCharDetail(idx) {
     const d = this.g.charDefs[idx];
     const sec = (tag, cls, s, extra = '') => s ? `<div class="dsec"><span class="tag ${cls}">${tag}</span><b>${esc(s.name)}</b>${s.type ? ` <small>${TYPE_LABEL[s.type] || ''}</small>` : ''}<br>${esc(s.desc || '')}${extra}</div>` : '';
-    const cd = (s) => s ? `<br><small>${s.cooldown ?? 2}턴마다 사용 가능</small>` : '';
+    const pv = d.passive, disc = pv?.type === 'skill_discount' ? pv.value : 0;
+    const cost = (s) => Math.round((s.mana ?? 35) * (1 - disc));
+    const cd = (s) => s ? `<br><small>마나 ${cost(s)}${s.cooldown ? ` · ${s.cooldown}턴에 한 번` : ''}</small>` : '';
     const html = `
       <div class="detail">
         <div class="dtop">
@@ -266,8 +273,8 @@ export class Screens {
         ${d.passive ? `<div class="dsec"><span class="tag passive">패시브</span><b>${esc(d.passive.name)}</b><br>${esc(d.passive.desc)}<br><small>항상 적용돼요</small></div>` : ''}
         ${sec('스킬1', '', d.skills?.[0], cd(d.skills?.[0]))}
         ${sec('스킬2', '', d.skills?.[1], cd(d.skills?.[1]))}
-        ${sec('궁극기', 'ult', d.ultimate, '<br><small>피해를 주거나 받으면 게이지가 차요. 100이 되면 보라색 궁극기 버튼이 빛나요 → 버튼을 누르고 발사!</small>')}
-        <p class="sub">사용법: 스킬 버튼을 누르면 다음 발사에 적용돼요 (다시 누르면 취소). 게임 중 버튼을 길게 누르면 설명이 떠요.</p>
+        ${sec('궁극기', 'ult', d.ultimate, d.ultimate ? `<br><small>마나 ${cost(d.ultimate)} · 기본 공격으로 상대를 ${this.g.cfg.ult.unlockHits}번 맞히면 해금</small>` : '')}
+        <p class="sub">사용법: 스킬 버튼을 누르면 다음 발사에 적용돼요 (다시 누르면 취소). 마나는 시간이 지나면 차고, 상대를 맞히면 더 차요. 게임 중 버튼을 길게 누르면 설명이 떠요.</p>
       </div>`;
     this.modal({ title: '캐릭터 정보', html });
   }
@@ -335,7 +342,7 @@ export class Screens {
     $('setup-count').querySelectorAll('[data-players]').forEach((b) => b.classList.toggle('on', +b.dataset.players === this.setupCount));
     this.renderMapChips($('setup-maps'), this.setupMap, (id) => { this.setupMap = id; this.renderSetup(); });
     const m = this.g.maps.find((x) => x.id === this.setupMap);
-    $('setup-map-desc').textContent = m ? m.desc : '5개 맵 중 무작위';
+    $('setup-map-desc').textContent = m ? m.desc : `${this.g.maps.length}개 맵 중 무작위`;
     const box = $('player-rows');
     box.innerHTML = '';
     for (let i = 0; i < this.setupCount; i++) {
@@ -384,6 +391,13 @@ export class Screens {
     this.announceHidden(players.map((p) => p.char));
   }
 
+  startTutorial() {
+    const vis = visibleIndices(this.g.charDefs);
+    const ch = vis.includes(this.store.lastChar) ? this.store.lastChar : vis[0];
+    requestFullscreenLandscape();
+    this.g.startTutorial(ch);
+  }
+
   announceHidden(chars) {
     const g = this.g;
     const hid = chars.filter((ci) => g.charDefs[ci]?.hidden);
@@ -411,6 +425,11 @@ export class Screens {
     el.textContent = winner ? `${winner.name} 승리!` : '무승부';
     el.style.color = winner ? winner.color : '#fff';
     $('over-sub').textContent = winner ? winner.charName : '';
+    if (this.g.tutorial) {
+      const me = winner && !winner.isBot;
+      el.textContent = me ? '튜토리얼 완료! 🎉' : '아쉬워요! 다시 도전해 보세요';
+      $('over-sub').textContent = me ? '이제 온라인 대전이나 봇 대전을 즐겨 보세요' : '';
+    }
     const online = this.g.mode !== 'local';
     $('btn-restart').textContent = online ? '방으로 돌아가기' : '처음으로';
     $('controls').classList.add('hidden');
@@ -449,7 +468,8 @@ export class Screens {
     const t = this.g.turn, c = t?.current;
     const s = c && skillOf(c, slot);
     if (!s) return;
-    const extra = slot === 3 ? `궁극기 게이지 ${Math.floor(c.ult)} / 100` : `${s.cooldown ?? 2}턴마다 사용${c.cooldowns[slot - 1] > 0 ? ` · ${c.cooldowns[slot - 1]}턴 남음` : ''}`;
+    const why = blockReason(c, slot);
+    const extra = `마나 ${manaCost(c, slot)}${slot === 3 ? ` · 기본 공격 ${c.ultNeed}번 적중 시 해금` : ''}${why ? `<br>⛔ ${esc(why)}` : ''}`;
     const tip = $('skill-tip');
     tip.innerHTML = `<b>${esc(s.name)}</b><br>${esc(s.desc || '')}<br><small>${extra}</small>`;
     const r = el.getBoundingClientRect();
@@ -628,6 +648,7 @@ export class Screens {
     this.roomMeta = null;
     this.roomPlayers = {};
     this.byes = {};
+    this.kicked = {};
     this.myChar = this.store.lastChar ?? RANDOM;
     $('room-chat-log').innerHTML = '';
     on.watchRoom({
@@ -635,10 +656,22 @@ export class Screens {
       players: (p) => this.onRoomPlayers(p),
       chat: (msg) => this.onChat(msg),
       bye: (b) => { this.byes = b; },
+      kicked: (k) => this.onKicked(k),
     });
     on.watchGameStart((start) => this.onGameStart(start));
     on.sendChat(this.nick, `${this.nick}님이 입장했습니다.`, true);
     this.show('room');
+  }
+
+  onKicked(k) {
+    this.kicked = k;
+    const on = this.online;
+    if (!on?.room || on.room.host || !k[on.uid]) return;
+    const inGame = this.g.mode !== 'local';
+    on.dropRoom();
+    if (inGame) this.g.stopMatch();
+    this.show('lobby');
+    this.alert('강퇴', '방장에 의해 강퇴되었어요.');
   }
 
   onRoomMeta(m) {
@@ -666,7 +699,7 @@ export class Screens {
       on.setMeta({ count: Object.keys(p).length });
       if (g.mode === 'host' && g.state === 'playing') {
         for (const c of g.chars) {
-          if (c.uid && !p[c.uid] && !c.fellOut) g.eliminate(c, this.byes[c.uid] ? `${c.name}님이 나갔습니다` : `${c.name}님이 강제종료했습니다`);
+          if (c.uid && !p[c.uid] && !c.fellOut) g.eliminate(c, this.kicked[c.uid] ? `${c.name}님이 강퇴되었습니다` : this.byes[c.uid] ? `${c.name}님이 나갔습니다` : `${c.name}님이 강제종료했습니다`);
         }
       }
     }
@@ -697,18 +730,32 @@ export class Screens {
       const state = isHost ? '<span class="badge host">방장</span>' : p.ready ? '<span class="badge ready">준비 완료</span>' : '<span class="badge wait">대기 중</span>';
       row.innerHTML = `<span class="pdot" style="background:${g.colors[i % g.colors.length]}"></span>${img}
         <span class="rpname">${isHost ? '👑 ' : ''}${esc(p.name)}${p.uid === on.uid ? ' <small>(나)</small>' : ''}<br><small>${ci === RANDOM ? '랜덤' : esc(g.charDefs[ci]?.name || '')}</small></span>${state}`;
+      if (host && !isHost && m.status !== 'playing') {
+        const kb = document.createElement('button');
+        kb.className = 'chip small kick';
+        kb.textContent = '강퇴';
+        kb.addEventListener('click', async () => {
+          if (!(await this.confirm('강퇴', `${p.name}님을 강퇴할까요? 이 방에 다시 들어올 수 없어요.`, '강퇴'))) return;
+          on.sendChat(this.nick, `${p.name}님이 강퇴되었습니다.`, true);
+          on.kick(p.uid);
+        });
+        row.appendChild(kb);
+      }
       box.appendChild(row);
     });
     const me = this.roomPlayers[on.uid];
     if (me && me.char !== undefined) this.myChar = me.char;
+    const locked = !host && !!me?.ready;
+    $('room-cards').classList.toggle('locked', locked);
     this.charCards($('room-cards'), this.myChar, (idx) => {
+      if (locked) { this.toast('준비를 취소해야 캐릭터를 바꿀 수 있어요'); setTimeout(() => this.toast(null), 1500); return; }
       this.myChar = idx;
       this.store.lastChar = idx;
       this.save();
       on.setMyPlayer({ char: idx });
       this.renderRoom();
     });
-    $('room-char-desc').textContent = this.charSummary(this.myChar);
+    $('room-char-desc').textContent = (locked ? '🔒 준비 완료 상태에서는 캐릭터를 바꿀 수 없어요 · ' : '') + this.charSummary(this.myChar);
     const mapBox = $('room-maps');
     if (host) {
       this.renderMapChips(mapBox, m.map, (id) => on.setMeta({ map: id }));
@@ -756,6 +803,59 @@ export class Screens {
     if (mode === 'client') requestFullscreenLandscape();
     this.g.startOnline(start, mode, this.online);
     this.announceHidden(start.players.map((p) => p.char));
+  }
+
+  // ---------- 통계 (캐릭터별 승률) ----------
+
+  // 방장: 온라인 경기 결과 기록 (사람 2명 이상, 개발용 봇 경기는 제외)
+  recordStats(g, winner) {
+    if (!g.cfg.stats?.enabled || !this.online?.room?.host || g.devOnlineBots) return;
+    if (g.chars.length < 2) return;
+    this.online.recordMatch({
+      v: VERSION, bv: g.balanceVersion, map: g.map.id,
+      p: g.chars.map((c) => ({ c: c.def.id, w: c === winner ? 1 : 0, d: c.dealt })),
+    }).catch((e) => console.warn('통계 기록 실패', e));
+  }
+
+  async showStats() {
+    this.show('stats');
+    const box = $('stats-body');
+    box.innerHTML = '<p class="sub">불러오는 중…</p>';
+    if (!this.fb) { box.innerHTML = '<p class="sub">Firebase 설정이 없어요.</p>'; return; }
+    if (!this.online) this.online = new Online(this.g.cfg.online, this.fb);
+    let rows;
+    try { rows = await withTimeout(this.online.fetchStats(), 12000); } catch (e) {
+      console.error(e);
+      box.innerHTML = '<p class="sub">불러오지 못했어요. (Firebase 보안 규칙에 stats 항목이 있는지 확인)</p>';
+      return;
+    }
+    this.statsRows = rows;
+    this.renderStats(String(this.g.balanceVersion));
+  }
+
+  renderStats(filter) {
+    const g = this.g, rows = this.statsRows || [];
+    const vers = [...new Set(rows.map((r) => String(r.bv ?? '?')))].sort();
+    const sel = rows.filter((r) => filter === 'all' || String(r.bv ?? '?') === filter);
+    const agg = {};
+    for (const d of g.charDefs) agg[d.id] = { name: d.name, n: 0, w: 0, dmg: 0 };
+    for (const r of sel) {
+      for (const p of r.p || []) {
+        const a = agg[p.c] || (agg[p.c] = { name: p.c, n: 0, w: 0, dmg: 0 });
+        a.n++;
+        a.w += p.w ? 1 : 0;
+        a.dmg += p.d || 0;
+      }
+    }
+    const list = Object.values(agg).sort((a, b) => (b.n ? b.w / b.n : -1) - (a.n ? a.w / a.n : -1));
+    const opts = ['all', ...vers].map((v) => `<button class="chip small ${v === filter ? 'on' : ''}" data-v="${esc(v)}">${v === 'all' ? '전체' : `밸런스 v${esc(v)}`}</button>`).join('');
+    $('stats-body').innerHTML = `
+      <div class="row wrap">${opts}</div>
+      <p class="sub">온라인 경기 ${sel.length}판 기준 · 판수가 적으면(10판 미만) 참고만 하세요</p>
+      <table class="stats"><tr><th>캐릭터</th><th>판수</th><th>승</th><th>승률</th><th>평균 피해</th></tr>
+      ${list.map((a) => `<tr><td>${esc(a.name)}</td><td>${a.n}</td><td>${a.w}</td><td>${a.n ? Math.round((a.w / a.n) * 100) + '%' : '-'}</td><td>${a.n ? Math.round(a.dmg / a.n) : '-'}</td></tr>`).join('')}
+      </table>`;
+    $('stats-body').querySelectorAll('[data-v]').forEach((b) => b.addEventListener('click', () => this.renderStats(b.dataset.v)));
   }
 
   async leaveRoomFlow() {

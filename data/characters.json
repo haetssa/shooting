@@ -1,69 +1,133 @@
 {
-  "balanceVersion": 3,
+  "balanceVersion": 4,
   "characters": [
     {
       "id": "dorampu",
       "name": "도람뿌",
       "desc": "달러 다발 · 받는 피해 10% 감소",
       "hp": 1000,
-      "moveFuel": 90,
+      "moveFuel": 180,
       "sprite": "assets/sprites/dorampu",
-      "spriteHeight": 72,
-      "weapon": { "projectile": "dollar", "damage": 240, "radius": 44 },
+      "spriteHeight": 80,
+      "weapon": { "projectile": "dollar", "damage": 240, "radius": 46 },
       "passive": { "type": "damage_reduction", "value": 0.1, "name": "부자 체질", "desc": "받는 피해 10% 감소" },
       "skills": [
-        { "id": "money_rain", "name": "돈 뿌리기", "type": "scatter", "cooldown": 2, "damage": 150, "radius": 34, "count": 5, "bombletDamage": 55, "bombletRadius": 22, "desc": "터지면 지폐 5장이 흩어져 추가 폭발" },
-        { "id": "wall", "name": "장벽 건설", "type": "build", "cooldown": 3, "radius": 55, "desc": "맞은 자리에 흙벽을 세운다" }
+        { "id": "money_rain", "name": "돈 뿌리기", "type": "scatter", "mana": 35, "damage": 150, "radius": 36, "count": 5, "bombletDamage": 55, "bombletRadius": 24, "desc": "터지면 지폐 5장이 흩어져 추가 폭발" },
+        { "id": "wall", "name": "관세 장벽", "type": "build", "shape": "wall", "mana": 30, "w": 60, "h": 150, "desc": "맞은 자리에 높은 벽돌 장벽을 세운다" }
       ],
-      "ultimate": { "id": "tariff", "name": "관세 폭탄", "type": "big_blast", "gauge": 100, "damage": 520, "radius": 110, "scale": 1.8, "desc": "거대한 달러 폭탄" }
+      "ultimate": { "id": "tariff", "name": "관세 폭탄", "type": "big_blast", "mana": 80, "damage": 520, "radius": 115, "scale": 1.8, "desc": "거대한 달러 폭탄" }
     },
     {
       "id": "simpsonhwang",
       "name": "심슨황",
       "desc": "그래픽카드 · 바람 영향 절반",
       "hp": 950,
-      "moveFuel": 110,
+      "moveFuel": 220,
       "sprite": "assets/sprites/simpsonhwang",
-      "spriteHeight": 72,
-      "weapon": { "projectile": "gpu", "damage": 230, "radius": 40 },
+      "spriteHeight": 80,
+      "weapon": { "projectile": "gpu", "damage": 230, "radius": 42 },
       "passive": { "type": "wind_resist", "value": 0.5, "name": "수랭 쿨링", "desc": "모든 공격의 바람 영향 절반" },
       "skills": [
-        { "id": "multi_gpu", "name": "멀티 GPU", "type": "multi_shot", "cooldown": 2, "count": 3, "spread": 6, "damage": 110, "radius": 30, "desc": "그래픽카드 3장 동시 발사" },
-        { "id": "ray", "name": "레이 트레이싱", "type": "pierce", "cooldown": 2, "depth": 170, "damage": 240, "radius": 38, "desc": "지형을 뚫고 들어가 폭발" }
+        { "id": "multi_gpu", "name": "멀티 GPU", "type": "multi_shot", "mana": 35, "count": 3, "spread": 6, "damage": 110, "radius": 32, "desc": "그래픽카드 3장 동시 발사" },
+        { "id": "ray", "name": "레이 트레이싱", "type": "pierce", "ghost": true, "mana": 40, "damage": 250, "radius": 40, "desc": "지형을 그대로 통과해 날아가다 캐릭터에 닿으면 폭발 (안 맞으면 빗나감)" }
       ],
-      "ultimate": { "id": "datacenter", "name": "AI 데이터센터", "type": "airstrike", "gauge": 100, "count": 6, "spread": 260, "damage": 140, "radius": 36, "desc": "맞은 곳 위로 그래픽카드 6장이 쏟아진다" }
+      "ultimate": { "id": "datacenter", "name": "AI 데이터센터", "type": "airstrike", "mana": 80, "count": 6, "spread": 260, "damage": 140, "radius": 38, "desc": "맞은 곳 위로 그래픽카드 6장이 쏟아진다" }
     },
     {
       "id": "jaedragon",
       "name": "재드래곤",
-      "desc": "스마트폰 · 궁극기 게이지 빨리 참",
+      "desc": "스마트폰 · 마나 회복 빠름",
       "hp": 1000,
-      "moveFuel": 120,
+      "moveFuel": 240,
       "sprite": "assets/sprites/jaedragon",
-      "spriteHeight": 72,
-      "weapon": { "projectile": "phone", "damage": 220, "radius": 42 },
-      "passive": { "type": "ult_charge", "value": 1.3, "name": "초격차", "desc": "궁극기 게이지 30% 빨리 참" },
+      "spriteHeight": 80,
+      "weapon": { "projectile": "phone", "damage": 220, "radius": 44 },
+      "passive": { "type": "mana_regen", "value": 1.3, "name": "초격차", "desc": "마나가 30% 빨리 찬다" },
       "skills": [
-        { "id": "foldable", "name": "폴더블", "type": "split", "cooldown": 2, "count": 3, "spread": 14, "damage": 110, "radius": 30, "desc": "최고점에서 3갈래로 갈라짐" },
-        { "id": "battery", "name": "보조배터리", "type": "heal", "cooldown": 3, "amount": 220, "desc": "체력 220 회복 (턴 종료)" }
+        { "id": "foldable", "name": "폴더블", "type": "split", "mana": 35, "count": 3, "spread": 14, "damage": 110, "radius": 32, "desc": "최고점에서 3갈래로 갈라짐" },
+        { "id": "battery", "name": "보조배터리", "type": "heal", "mana": 50, "cooldown": 3, "amount": 150, "desc": "체력 150 회복 (즉시 턴 종료, 3턴에 한 번)" }
       ],
-      "ultimate": { "id": "ultra_fold", "name": "울트라 폴더블", "type": "split", "gauge": 100, "count": 6, "spread": 10, "damage": 130, "radius": 36, "scale": 1.4, "desc": "최고점에서 6갈래로 갈라짐" }
+      "ultimate": { "id": "ultra_fold", "name": "울트라 폴더블", "type": "split", "mana": 80, "count": 6, "spread": 10, "damage": 120, "radius": 36, "scale": 1.4, "desc": "최고점에서 6갈래로 갈라짐" }
     },
     {
       "id": "einstaing",
       "name": "아인슈타잉",
       "desc": "블랙홀 · 맞으면 끌려감 · 궤적 일부 보임",
       "hp": 900,
-      "moveFuel": 100,
+      "moveFuel": 200,
       "sprite": "assets/sprites/einstaing",
-      "spriteHeight": 72,
-      "weapon": { "projectile": "blackhole", "damage": 200, "radius": 50, "knockbackMult": -0.9, "fx": "void" },
+      "spriteHeight": 80,
+      "weapon": { "projectile": "blackhole", "damage": 200, "radius": 52, "knockbackMult": -0.9, "fx": "void" },
       "passive": { "type": "trajectory_preview", "value": 0.45, "name": "천재의 계산", "desc": "예상 궤적 앞부분이 보인다" },
       "skills": [
-        { "id": "lens", "name": "중력 렌즈", "type": "shot", "cooldown": 2, "gravityMult": 0.45, "windMult": 0, "damage": 210, "radius": 40, "desc": "중력·바람 영향을 덜 받는 직선 사격" },
-        { "id": "wormhole", "name": "웜홀", "type": "teleport", "cooldown": 3, "desc": "떨어진 곳으로 순간이동" }
+        { "id": "relativity", "name": "상대성 이론", "type": "homing", "mana": 35, "damage": 180, "radius": 42, "delay": 0.35, "range": 380, "turn": 2.6, "desc": "날아가다 가까운 적 쪽으로 궤도가 휜다" },
+        { "id": "wormhole", "name": "웜홀", "type": "teleport", "mana": 40, "range": 650, "desc": "버튼을 누르고 화면을 터치한 곳으로 순간이동 (이동 후 발사 가능)" }
       ],
-      "ultimate": { "id": "emc2", "name": "E=mc²", "type": "big_blast", "gauge": 100, "damage": 600, "radius": 140, "knockbackMult": -1.3, "fx": "void", "scale": 1.8, "desc": "초거대 블랙홀" }
+      "ultimate": { "id": "emc2", "name": "E=mc²", "type": "big_blast", "mana": 85, "damage": 600, "radius": 140, "knockbackMult": -1.3, "fx": "void", "scale": 1.8, "desc": "초거대 블랙홀" }
+    },
+    {
+      "id": "elonstark",
+      "name": "일론스타크",
+      "desc": "도지코인 · 낙하 피해 없음",
+      "hp": 950,
+      "moveFuel": 200,
+      "sprite": "assets/sprites/elonstark",
+      "spriteHeight": 80,
+      "weapon": { "projectile": "doge", "damage": 225, "radius": 42 },
+      "passive": { "type": "safe_landing", "value": 170, "name": "타슬라 로드스터", "desc": "높은 곳에서 떨어지면 로드스터로 변신해 천천히 착지 (낙하 피해 없음)" },
+      "skills": [
+        { "id": "falcon", "name": "팰컨 로켓", "type": "shot", "mana": 35, "projectile": "rocket", "gravityMult": 0.35, "windMult": 0.25, "damage": 220, "radius": 40, "desc": "중력과 바람을 거의 안 받고 곧게 날아가는 로켓" },
+        { "id": "starlink", "name": "스타링크", "type": "airstrike", "mana": 40, "projectile": "satellite", "count": 3, "spread": 140, "damage": 95, "radius": 30, "desc": "맞은 곳 위로 위성 3개가 떨어진다" }
+      ],
+      "ultimate": { "id": "starship", "name": "화성행 우주선", "type": "big_blast", "mana": 80, "projectile": "starship", "scale": 1.6, "damage": 500, "radius": 120, "desc": "거대한 우주선이 꽂힌다" }
+    },
+    {
+      "id": "hyeoksinman",
+      "name": "혁신맨",
+      "desc": "스마트폰 · 마나 20% 할인",
+      "hp": 950,
+      "moveFuel": 200,
+      "sprite": "assets/sprites/hyeoksinman",
+      "spriteHeight": 80,
+      "weapon": { "projectile": "iphone", "damage": 225, "radius": 42 },
+      "passive": { "type": "skill_discount", "value": 0.2, "name": "현실 왜곡장", "desc": "스킬과 궁극기 마나 소모 20% 감소" },
+      "skills": [
+        { "id": "onemore", "name": "원 모어 띵", "type": "bounce", "mana": 35, "damage": 150, "radius": 34, "desc": "땅에 닿으면 터지고 튀어 올라 한 번 더 터진다" },
+        { "id": "keynote", "name": "키노트", "type": "shield", "mana": 30, "value": 0.5, "desc": "다음 내 턴까지 받는 피해 50% 감소 (턴은 계속)" }
+      ],
+      "ultimate": { "id": "launch", "name": "신제품 출시", "type": "multi_shot", "mana": 85, "count": 5, "spread": 4, "damage": 130, "radius": 34, "desc": "스마트폰 5대 동시 발사" }
+    },
+    {
+      "id": "northpigs",
+      "name": "노스돼지스",
+      "desc": "오물풍선 · 약하지만 궁극기는 핵",
+      "hp": 1100,
+      "moveFuel": 140,
+      "sprite": "assets/sprites/northpigs",
+      "spriteHeight": 80,
+      "weapon": { "projectile": "balloon", "damage": 150, "radius": 36, "windMult": 1.4, "gravityMult": 0.9 },
+      "passive": { "type": "damage_reduction", "value": -0.1, "name": "국제 제재", "desc": "받는 피해 10% 증가 (공공의 적)" },
+      "skills": [
+        { "id": "trash", "name": "오물 살포", "type": "scatter", "mana": 40, "damage": 80, "radius": 28, "count": 4, "bombletDamage": 25, "bombletRadius": 16, "windMult": 1.6, "desc": "터지면 작은 오물 4개가 흩어진다 (위력 약함)" },
+        { "id": "tunnel", "name": "땅굴 파기", "type": "pierce", "depth": 200, "mana": 40, "damage": 110, "radius": 34, "desc": "지형을 파고 들어가 터진다 (위력 약함)" }
+      ],
+      "ultimate": { "id": "nuke", "name": "핵 도발", "type": "big_blast", "mana": 90, "projectile": "nuke", "scale": 1.7, "damage": 640, "radius": 175, "fx": "nuke", "windMult": 0.6, "desc": "초대형 폭발. 이것만큼은 진짜다" }
+    },
+    {
+      "id": "ariana",
+      "name": "아리아나 벤틴데",
+      "desc": "마이크 · 매 턴 체력 회복",
+      "hp": 900,
+      "moveFuel": 220,
+      "sprite": "assets/sprites/ariana",
+      "spriteHeight": 86,
+      "weapon": { "projectile": "mic", "damage": 220, "radius": 42 },
+      "passive": { "type": "regen", "value": 25, "name": "팬덤 응원", "desc": "내 턴이 시작될 때마다 체력 25 회복" },
+      "skills": [
+        { "id": "whistle", "name": "휘슬 보이스", "type": "shot", "mana": 30, "projectile": "note", "damage": 150, "radius": 64, "knockbackMult": 2.2, "desc": "넓은 음파로 크게 밀쳐낸다" },
+        { "id": "rings", "name": "7 링스", "type": "split", "mana": 35, "projectile": "ring", "count": 7, "spread": 6, "damage": 50, "radius": 24, "desc": "최고점에서 반지 7개로 갈라짐" }
+      ],
+      "ultimate": { "id": "concert", "name": "팝스타 공연", "type": "global", "mana": 90, "damage": 190, "desc": "필드의 모든 적에게 똑같이 190 피해 (즉시 발동, 턴 종료)" }
     }
   ]
 }

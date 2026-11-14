@@ -1,9 +1,9 @@
-// HUD(화면 좌표): 바람 표시, 플레이어 목록, 타이머, 파워/각도/연료 게이지, 머리 위 이름표, 배너
-// 월드 좌표 그리기 도우미: 조준선, 투사체
+// HUD(화면 좌표): 바람 표시, 플레이어 목록(체력/마나), 타이머, 미니맵, 맵 소개, 파워/각도/연료/마나 게이지, 머리 위 이름표, 배너
+// 월드 좌표 그리기 도우미: 조준선, 예상 궤적, 지난 궤적, 순간이동 범위
 import { clamp, mixHex } from './util.js';
 import { roundRect as rr } from './character.js';
 import { OUTLINE as INK } from './terrain.js';
-import { skillOf } from './skills.js';
+import { skillOf, ultLocked } from './skills.js';
 
 const FONT = 'system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif';
 
@@ -26,9 +26,20 @@ export class HUD {
     this.streaks = [];
     for (let i = 0; i < 36; i++) this.streaks.push({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random(), l: 0.5 + Math.random() });
     this.banner = null;
+    this.intro = null;
+    this.mm = null;
+    this.mini = null;
   }
 
   showBanner(str, color = '#fff') { this.banner = { text: str, color, t: 0 }; }
+  showIntro(title, text) { this.intro = { title, text, t: 0 }; }
+
+  // 미니맵을 눌렀으면 그 지점의 월드 좌표, 아니면 null
+  minimapHit(sx, sy) {
+    const m = this.mm;
+    if (!m || sx < m.x || sy < m.y || sx > m.x + m.w || sy > m.y + m.h) return null;
+    return { x: (sx - m.x) / m.s, y: (sy - m.y) / m.s };
+  }
 
   update(dt, wind, max) {
     if (wind && max > 0) {
@@ -44,6 +55,10 @@ export class HUD {
       this.banner.t += dt;
       if (this.banner.t > 1.6) this.banner = null;
     }
+    if (this.intro) {
+      this.intro.t += dt;
+      if (this.intro.t > 5) this.intro = null;
+    }
   }
 
   draw(ctx, game, w, h) {
@@ -53,6 +68,7 @@ export class HUD {
     this.drawLabels(ctx, game);
     this.drawBubbles(ctx, game);
     game.effects.drawTexts(ctx, game.camera);
+    this.drawMinimap(ctx, game, w, h);
     this.drawWind(ctx, game.wind, wmax, w);
     this.drawPlayers(ctx, game);
     this.drawChatLog(ctx, game);
@@ -60,7 +76,82 @@ export class HUD {
       this.drawTimer(ctx, game, w);
       this.drawGauge(ctx, game, w, h);
     }
+    this.drawIntro(ctx, w);
     this.drawBanner(ctx, w, h);
+  }
+
+  // 미니맵: 지형 축소본 + 캐릭터 점 + 투사체 + 현재 화면 범위. 누르면 그곳으로 화면 이동
+  drawMinimap(ctx, game, w, h) {
+    const map = game.map, T = game.terrain;
+    const mw = Math.round(clamp(w * 0.19, 112, 200)), s = mw / map.width, mh = Math.round(map.height * s);
+    const x = w - 66 - mw, y = 8;
+    this.mm = { x, y, w: mw, h: mh, s };
+    const now = game.time;
+    if (!this.mini || this.mini.terrain !== T || this.mini.w !== mw || (T.dirty && now - this.mini.at > 0.25)) {
+      const c = this.mini?.canvas || document.createElement('canvas');
+      c.width = mw * 2;
+      c.height = mh * 2;
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, c.width, c.height);
+      g.drawImage(T.canvas, 0, 0, c.width, c.height);
+      this.mini = { canvas: c, terrain: T, at: now, w: mw };
+      T.dirty = false;
+    }
+    rr(ctx, x - 2, y - 2, mw + 4, mh + 4, 6);
+    ctx.fillStyle = 'rgba(20,22,40,0.9)';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.stroke();
+    ctx.drawImage(this.mini.canvas, x, y, mw, mh);
+    const v = game.camera.visibleRect();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.5;
+    const vx = clamp(x + v.x * s, x, x + mw), vy = clamp(y + v.y * s, y, y + mh);
+    ctx.strokeRect(vx, vy, clamp(x + (v.x + v.w) * s, x, x + mw) - vx, clamp(y + (v.y + v.h) * s, y, y + mh) - vy);
+    const cur = game.state === 'playing' ? game.turn.current : null;
+    for (const c of game.chars) {
+      if (c.fellOut) continue;
+      const px = x + c.x * s, py = y + c.cy * s;
+      const r = c === cur ? 4 + Math.sin(now * 8) : 3.2;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fillStyle = c.alive ? c.color : '#777';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = INK;
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#fff';
+    for (const p of game.projectiles) {
+      const px = x + p.x * s, py = y + p.y * s;
+      if (px < x || px > x + mw || py < y || py > y + mh) continue;
+      ctx.fillRect(px - 1.5, py - 1.5, 3, 3);
+    }
+  }
+
+  // 경기 시작 시 맵 특성 안내 (토스트)
+  drawIntro(ctx, w) {
+    const it = this.intro;
+    if (!it) return;
+    const a = it.t < 0.3 ? it.t / 0.3 : it.t > 4.4 ? Math.max(0, 1 - (it.t - 4.4) / 0.6) : 1;
+    ctx.globalAlpha = a;
+    ctx.font = `700 13px ${FONT}`;
+    const tw = Math.min(w - 40, Math.max(220, ctx.measureText(it.text).width + 30));
+    const x = w / 2 - tw / 2, y = 60;
+    rr(ctx, x, y, tw, 50, 12);
+    ctx.fillStyle = 'rgba(20,22,40,0.85)';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffd23f';
+    ctx.stroke();
+    text(ctx, it.title, w / 2, y + 15, 15, '#ffd23f', 'center', 900);
+    ctx.font = `700 12px ${FONT}`;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(it.text, w / 2, y + 36, tw - 16);
+    ctx.globalAlpha = 1;
   }
 
   // 채팅 말풍선 (머리 위)
@@ -153,7 +244,7 @@ export class HUD {
   }
 
   drawWind(ctx, wind, max, w) {
-    const pw = 190, ph = 44, x = w / 2 - pw / 2, y = 8;
+    const pw = 190, ph = 44, x = Math.max(184, Math.min(w / 2 - pw / 2, w - 66 - this.mmW() - pw - 10)), y = 8;
     rr(ctx, x, y, pw, ph, 12);
     ctx.fillStyle = 'rgba(20,22,40,0.72)';
     ctx.fill();
@@ -195,6 +286,8 @@ export class HUD {
     text(ctx, String(Math.round(Math.abs(v))), x + pw - 18, cy, 18, col, 'center');
   }
 
+  mmW() { return this.mm ? this.mm.w : 120; }
+
   drawPlayers(ctx, game) {
     const cur = game.state === 'playing' ? game.turn.current : null;
     let y = 8;
@@ -219,9 +312,10 @@ export class HUD {
         ctx.fillStyle = hpColor(r);
         ctx.fillRect(105, y + 8, 62 * r, 6);
       }
-      if (c.alive && c.ult > 0) {
-        ctx.fillStyle = c.ult >= 100 ? '#e2b6ff' : '#9b6bd6';
-        ctx.fillRect(105, y + 16, 62 * (c.ult / 100), 3);
+      if (c.alive) {
+        ctx.fillStyle = '#4fb6ff';
+        ctx.fillRect(105, y + 16, 62 * Math.min(1, c.mana / (game.cfg.mana.max || 100)), 3);
+        if (c.def.ultimate && !ultLocked(c)) text(ctx, '★', 172, y + 11, 11, '#e2b6ff', 'center', 900);
       }
       if (c.isBot) text(ctx, '봇', 96, y + 11, 9, '#cfd6e6', 'right', 700);
       y += 26;
@@ -247,7 +341,7 @@ export class HUD {
 
   drawGauge(ctx, game, w, h) {
     const t = game.turn, c = t.current;
-    const gw = clamp(w - 480, 150, 360), gh = 18, gx = (w - gw) / 2, gy = h - 42;
+    const gw = clamp(w - 480, 150, 360), gh = 18, gx = (w - gw) / 2, gy = h - 52;
     rr(ctx, gx - 2, gy - 2, gw + 4, gh + 4, 8);
     ctx.fillStyle = INK;
     ctx.fill();
@@ -290,6 +384,14 @@ export class HUD {
     ctx.fillStyle = '#5ee27a';
     ctx.fillRect(gx + 1, fy + 1, (gw - 2) * (c.fuel / c.maxFuel), 4);
     text(ctx, '연료', gx + gw + 22, fy + 3, 11, '#cfd6e6', 'center', 700);
+    // 마나
+    const my = fy + 9, mmax = game.cfg.mana.max || 100;
+    rr(ctx, gx, my, gw, 6, 3);
+    ctx.fillStyle = INK;
+    ctx.fill();
+    ctx.fillStyle = '#4fb6ff';
+    ctx.fillRect(gx + 1, my + 1, (gw - 2) * Math.min(1, c.mana / mmax), 4);
+    text(ctx, `마나 ${Math.floor(c.mana)}`, gx - 6, my + 3, 11, '#9fd8ff', 'right', 700);
   }
 
   drawBanner(ctx, w, h) {
@@ -354,3 +456,42 @@ export function drawAim(ctx, c) {
   ctx.stroke();
 }
 
+
+// 지난번 궤적 (흐린 점선 + 떨어진 곳 X 표시)
+export function drawGhost(ctx, pts) {
+  if (!pts || pts.length < 4) return;
+  ctx.save();
+  ctx.setLineDash([5, 9]);
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath();
+  ctx.moveTo(pts[0], pts[1]);
+  for (let i = 2; i < pts.length; i += 4) ctx.lineTo(pts[i], pts[i + 1]);
+  ctx.lineTo(pts[pts.length - 2], pts[pts.length - 1]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const x = pts[pts.length - 2], y = pts[pts.length - 1];
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.moveTo(x - 7, y - 7); ctx.lineTo(x + 7, y + 7);
+  ctx.moveTo(x + 7, y - 7); ctx.lineTo(x - 7, y + 7);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 순간이동 가능 범위
+export function drawRange(ctx, c, range, time) {
+  ctx.save();
+  ctx.setLineDash([10, 8]);
+  ctx.lineDashOffset = -time * 30;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(217,166,255,0.8)';
+  ctx.beginPath();
+  ctx.arc(c.x, c.cy, range, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(217,166,255,0.08)';
+  ctx.fill();
+  ctx.restore();
+}

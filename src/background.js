@@ -28,6 +28,21 @@ const THEMES = {
     far: (g, W, H, r) => asteroids(g, W, H, r),
     near: (g, W, H, r) => station(g, W, H, r),
   },
+  night: {
+    sky: ['#0d1030', '#262a5c', '#5a3f74'], deco: 'moon',
+    far: (g, W, H, r) => skyline(g, W, H, r, { body: '#2b2f5a', line: '#22254a', win: '#ffe08a', lit: 0.3, minH: 280, maxH: 720, minW: 70, maxW: 170 }),
+    near: (g, W, H, r) => skyline(g, W, H, r, { body: '#1a1c3a', line: '#121329', win: '#ff7ad9', lit: 0.4, minH: 140, maxH: 520, minW: 60, maxW: 150 }),
+  },
+  jungle: {
+    sky: ['#79c7e3', '#bfe7d4', '#eef6c8'], deco: 'sun',
+    far: (g, W, H, r) => hills(g, W, H, r, ['#7fb98a', '#6aa877']),
+    near: (g, W, H, r) => jungleTrees(g, W, H, r),
+  },
+  volcano: {
+    sky: ['#2a0f12', '#6b2418', '#d0612c'], deco: 'ember',
+    far: (g, W, H, r) => volcanoes(g, W, H, r),
+    near: (g, W, H, r) => lavaRocks(g, W, H, r),
+  },
 };
 
 export function buildBackground(map) {
@@ -83,6 +98,32 @@ export function drawSky(ctx, bg, cw, ch, time) {
       ctx.strokeStyle = `rgba(120,255,200,${0.18 - k * 0.04})`;
       ctx.stroke();
     }
+  } else if (bg.deco === 'moon') {
+    for (const s of bg.stars) {
+      if (s.y > 0.6) continue;
+      ctx.globalAlpha = 0.4 + 0.4 * Math.sin(time * 1.5 + s.p);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(s.x * cw, s.y * ch, s.s, s.s);
+    }
+    ctx.globalAlpha = 1;
+    const x = cw * 0.62, y = ch * 0.26, r = Math.min(cw, ch) * 0.075;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff6d6';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + r * 0.35, y - r * 0.15, r * 0.85, 0, Math.PI * 2);
+    ctx.fillStyle = bg.sky[0];
+    ctx.fill();
+  } else if (bg.deco === 'ember') {
+    for (const s of bg.stars) {
+      const yy = (s.y - time * 0.04 * s.s) % 1;
+      const py = (yy < 0 ? yy + 1 : yy) * ch;
+      ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(time * 2 + s.p));
+      ctx.fillStyle = s.p > 3 ? '#ffb347' : '#ff6a3d';
+      ctx.fillRect(s.x * cw + Math.sin(time + s.p) * 8, py, s.s + 1, s.s + 1);
+    }
+    ctx.globalAlpha = 1;
   } else if (bg.deco === 'stars') {
     for (const s of bg.stars) {
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(time * 2 + s.p);
@@ -313,5 +354,119 @@ function station(g, W, H, rng) {
       g.fillRect(x + w / 2 - 2, y - h / 2 - 36, 4, 36);
     }
     x += w + 160 + rng() * 200;
+  }
+}
+
+function hills(g, W, H, rng, cols) {
+  cols.forEach((col, k) => {
+    const ph = rng() * 10, base = H - 260 + k * 120;
+    g.beginPath();
+    g.moveTo(0, H);
+    for (let x = 0; x <= W; x += 20) g.lineTo(x, base - Math.abs(Math.sin(x / (300 + k * 120) + ph)) * (160 - k * 40));
+    g.lineTo(W, H);
+    g.closePath();
+    g.fillStyle = col;
+    g.fill();
+  });
+}
+
+function jungleTrees(g, W, H, rng) {
+  g.fillStyle = '#2f6b3a';
+  g.fillRect(0, H - 40, W, 40);
+  let x = 0;
+  while (x < W) {
+    const h = 160 + rng() * 220, tw = 12 + rng() * 8;
+    g.fillStyle = '#5a3d24';
+    g.fillRect(x - tw / 2, H - 40 - h, tw, h);
+    if (rng() < 0.5) {
+      // 야자수 잎
+      g.strokeStyle = '#2f7d3a';
+      g.lineWidth = 14;
+      g.lineCap = 'round';
+      for (let k = 0; k < 5; k++) {
+        const a = -Math.PI / 2 + (k - 2) * 0.6;
+        g.beginPath();
+        g.moveTo(x, H - 40 - h);
+        g.quadraticCurveTo(x + Math.cos(a) * 60, H - 40 - h + Math.sin(a) * 40 - 20, x + Math.cos(a) * 95, H - 40 - h + 30);
+        g.stroke();
+      }
+    } else {
+      for (const [dx, dy, r] of [[0, -20, 60], [-40, 10, 45], [40, 10, 45]]) {
+        g.beginPath();
+        g.arc(x + dx, H - 40 - h + dy, r, 0, Math.PI * 2);
+        g.fillStyle = '#3b8a45';
+        g.fill();
+      }
+      g.strokeStyle = '#2c6b35';
+      g.lineWidth = 3;
+      for (let k = 0; k < 3; k++) {
+        const vx = x - 30 + k * 30;
+        g.beginPath();
+        g.moveTo(vx, H - 40 - h + 30);
+        g.quadraticCurveTo(vx + 10, H - 40 - h + 90, vx - 4, H - 40 - h + 140);
+        g.stroke();
+      }
+    }
+    x += 90 + rng() * 160;
+  }
+}
+
+function volcanoes(g, W, H, rng) {
+  let x = 200;
+  while (x < W + 200) {
+    const w = 500 + rng() * 300, h = 380 + rng() * 260;
+    g.beginPath();
+    g.moveTo(x - w / 2, H);
+    g.lineTo(x - w * 0.09, H - h);
+    g.lineTo(x + w * 0.09, H - h);
+    g.lineTo(x + w / 2, H);
+    g.closePath();
+    g.fillStyle = '#3d1c1a';
+    g.fill();
+    // 분화구 용암 + 흘러내림
+    g.fillStyle = '#ff6a2a';
+    g.fillRect(x - w * 0.09, H - h, w * 0.18, 10);
+    g.strokeStyle = '#ff7a3a';
+    g.lineWidth = 6;
+    g.beginPath();
+    g.moveTo(x - 10, H - h + 8);
+    g.quadraticCurveTo(x - 40, H - h * 0.6, x - 70, H - h * 0.25);
+    g.stroke();
+    // 연기
+    g.fillStyle = 'rgba(80,60,60,0.5)';
+    for (let k = 0; k < 4; k++) {
+      g.beginPath();
+      g.arc(x + k * 25 - 20, H - h - 40 - k * 55, 34 + k * 10, 0, Math.PI * 2);
+      g.fill();
+    }
+    x += w * 1.1 + rng() * 300;
+  }
+}
+
+function lavaRocks(g, W, H, rng) {
+  g.fillStyle = '#ff5a1f';
+  g.fillRect(0, H - 34, W, 34);
+  g.fillStyle = '#ffb347';
+  for (let x = 0; x < W; x += 40) g.fillRect(x + rng() * 20, H - 30 + rng() * 10, 14, 3);
+  let x = 0;
+  while (x < W) {
+    const w = 60 + rng() * 120, h = 60 + rng() * 160;
+    g.beginPath();
+    g.moveTo(x, H - 30);
+    g.lineTo(x + w * 0.3, H - 30 - h);
+    g.lineTo(x + w * 0.55, H - 30 - h * 0.7);
+    g.lineTo(x + w * 0.8, H - 30 - h * 0.9);
+    g.lineTo(x + w, H - 30);
+    g.closePath();
+    g.fillStyle = '#241414';
+    g.fill();
+    g.strokeStyle = '#ff6a2a';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(x + w * 0.4, H - 30 - h * 0.5);
+    g.lineTo(x + w * 0.5, H - 30 - h * 0.25);
+    g.lineTo(x + w * 0.45, H - 32);
+    g.stroke();
+    x += w + rng() * 120;
   }
 }

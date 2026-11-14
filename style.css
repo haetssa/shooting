@@ -33,6 +33,20 @@ input, select { user-select: text; -webkit-user-select: text; touch-action: mani
 .ctl.fire { width: 92px; height: 92px; border-radius: 50%; background: #ff6b5b; color: #fff; font-size: 21px; }
 .ctl.fire.down { background: #ff9a3c; }
 .skills { display: flex; flex-direction: column; gap: 8px; }
+.firecol { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.ctl.jump { width: 76px; height: 46px; border-radius: 14px; background: #bfe8ff; }
+.ctl.skill small { display: block; font-size: 9px; font-weight: 700; opacity: 0.8; margin-top: 1px; }
+
+#tutorial {
+  position: absolute; left: calc(8px + env(safe-area-inset-left)); top: calc(70px + env(safe-area-inset-top));
+  width: min(330px, 38vw); pointer-events: auto; text-align: left;
+  background: rgba(20, 22, 40, 0.92); border: 2px solid #5ee27a; border-radius: 14px; padding: 8px 12px;
+  display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45;
+}
+.tut-head { display: flex; justify-content: space-between; font-size: 11px; font-weight: 800; color: #5ee27a; }
+#tut-text { white-space: pre-line; font-weight: 600; }
+#tut-next { align-self: flex-end; }
+#tut-wait { font-size: 11px; opacity: 0.7; }
 .ctl.skill {
   width: 66px; height: 40px; border-radius: 12px; font-size: 11px; line-height: 1.1;
   padding: 0 3px; word-break: keep-all;
@@ -97,6 +111,7 @@ input, select { user-select: text; -webkit-user-select: text; touch-action: mani
 .big { background: #ff6b5b; color: #fff; font-size: 20px; padding: 12px 44px; }
 .big.slim { padding: 8px 22px; font-size: 16px; }
 .big.alt { background: #3fa7ff; }
+.big.tut { background: #5ee27a; color: #1c1a2b; font-size: 17px; }
 .big:disabled { background: #8a8fa3; cursor: default; }
 .menu { display: flex; flex-direction: column; gap: 10px; }
 .profile { display: flex; gap: 10px; align-items: center; font-size: 18px; }
@@ -138,6 +153,15 @@ input, select { user-select: text; -webkit-user-select: text; touch-action: mani
 .dice { display: flex; align-items: center; justify-content: center; font-size: 26px; }
 .dice.small { width: 34px; height: 34px; font-size: 20px; border-radius: 8px; background: rgba(255,255,255,0.12); }
 .card.on { border-color: #ffd23f; background: rgba(255,210,63,0.22); }
+.cards.locked .card:not(.on) { opacity: 0.4; }
+.chip.kick { padding: 2px 8px; font-size: 11px; background: #ff8a8a; box-shadow: 0 2px 0 #1c1a2b; }
+
+/* 통계 */
+#stats-body { width: min(720px, 100%); display: flex; flex-direction: column; gap: 8px; padding-bottom: 20px; }
+table.stats { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.stats th, table.stats td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.12); text-align: center; }
+table.stats th { color: #ffd23f; font-weight: 800; }
+table.stats td:first-child { text-align: left; font-weight: 700; }
 .card .info {
   position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%;
   background: #3fa7ff; color: #fff; border: 2px solid #1c1a2b; font: 900 11px/16px serif; font-style: italic;
@@ -228,7 +252,10 @@ input, select { user-select: text; -webkit-user-select: text; touch-action: mani
   .ctl { width: 54px; height: 54px; font-size: 19px; }
   .ctl.small { font-size: 14px; }
   .ctl.fire { width: 82px; height: 82px; font-size: 19px; }
-  .ctl.skill { width: 62px; height: 34px; font-size: 10px; }
+  .ctl.skill { width: 62px; height: 38px; font-size: 10px; }
+  .ctl.jump { width: 66px; height: 38px; }
+  .firecol { gap: 6px; }
+  #tutorial { top: calc(64px + env(safe-area-inset-top)); width: min(300px, 36vw); font-size: 11px; line-height: 1.35; padding: 6px 9px; gap: 3px; }
   .ctl.round { width: 34px; height: 34px; font-size: 15px; }
   .topbtns { top: calc(62px + env(safe-area-inset-top)); gap: 5px; }
   .skills { gap: 6px; }

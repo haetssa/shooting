@@ -95,6 +95,7 @@ export class Terrain {
       }
     }
     this.holes.push({ x: Math.round(x), y: Math.round(y), r });
+    this.dirty = true;
   }
 
   // 지형 생성 (장벽 건설 스킬). 기존 지형 뒤쪽(빈 곳)에만 그려서 바깥 테두리에만 외곽선이 생긴다.
@@ -123,6 +124,41 @@ export class Terrain {
       }
     }
     this.holes.push({ x: Math.round(x), y: Math.round(y), r, add: true });
+    this.dirty = true;
+  }
+
+  // 벽돌 장벽 (관세 장벽 스킬). (x, bottom) = 아래 가운데. 위에 그려서 벽이 또렷하게 보인다
+  addWall(x, bottom, w, h) {
+    const ctx = this.ctx;
+    const x0 = Math.round(x - w / 2), y0 = Math.round(bottom - h);
+    ctx.save();
+    ctx.fillStyle = '#b5523b';
+    ctx.fillRect(x0, y0, w, h);
+    const bw = 20, bh = 12;
+    for (let row = 0, y = y0; y < y0 + h; row++, y += bh) {
+      const off = row % 2 ? bw / 2 : 0;
+      for (let bx = x0 - bw + off; bx < x0 + w; bx += bw) {
+        const l = Math.max(x0, bx + 1.5), r = Math.min(x0 + w, bx + bw - 1.5);
+        if (r <= l) continue;
+        ctx.fillStyle = (row * 3 + Math.round(bx / bw)) % 4 === 0 ? '#d0735a' : '#c2604a';
+        ctx.fillRect(l, y + 1.5, r - l, Math.min(bh - 3, y0 + h - y - 1.5));
+      }
+    }
+    // 윗면 갓돌
+    ctx.fillStyle = '#e8d9c0';
+    ctx.fillRect(x0 - 4, y0, w + 8, 10);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = OUTLINE;
+    ctx.strokeRect(x0 - 4, y0, w + 8, 10);
+    ctx.lineWidth = 6;
+    ctx.strokeRect(x0 + 1, y0 + 1, w - 2, h - 2);
+    ctx.restore();
+    for (let yy = Math.max(0, y0); yy < Math.min(this.h, y0 + h); yy++) {
+      for (let xx = Math.max(0, x0 - 4); xx < Math.min(this.w, x0 + w + 4); xx++) {
+        if (yy < y0 + 10 || (xx >= x0 && xx < x0 + w)) this.mask[yy * this.w + xx] = 1;
+      }
+    }
+    this.dirty = true;
   }
 }
 

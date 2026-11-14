@@ -16,6 +16,13 @@
         ".validate": "!newData.exists() || (newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('max').isNumber() && newData.child('max').val() <= 6)"
       }
     },
+    "stats": {
+      ".read": true,
+      "$id": {
+        ".write": "!data.exists()",
+        ".validate": "newData.hasChildren(['p', 'at', 'map']) && newData.child('map').isString() && newData.child('map').val().length <= 30"
+      }
+    },
     "rooms": {
       "$room": {
         ".read": true,

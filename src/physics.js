@@ -2,8 +2,10 @@
 
 // 한 틱 진행. 충돌하면 { x, y, direct } 또는 { out: true } 반환
 // p.pierceLeft > 0 이면 지형을 그만큼 뚫고 지나간다 (env.sim 이면 지형을 깎지 않음)
+// p.ghost 면 지형을 무시하고 캐릭터에만 맞는다, homing 무기는 가까운 적 쪽으로 휜다
 export function stepProjectile(p, dt, env) {
   const w = p.weapon;
+  if (w.behavior === 'homing' && p.age >= (w.skill.delay ?? 0.3)) steerHoming(p, dt, env);
   p.vx += env.windAccel * (w.windMult ?? 1) * dt;
   p.vy += env.gravity * (w.gravityMult ?? 1) * dt;
   p.age += dt;
@@ -21,7 +23,7 @@ export function stepProjectile(p, dt, env) {
       if (!c.alive || (c === p.owner && !p.armed)) continue;
       if (c.hitTest(p.x, p.y, p.radius)) return { x: p.x, y: p.y, direct: c };
     }
-    if (env.terrain.isSolid(p.x, p.y)) {
+    if (!p.ghost && env.terrain.isSolid(p.x, p.y)) {
       if (p.pierceLeft > 0) {
         const sl = Math.hypot(sx, sy);
         p.pierceLeft -= sl;
@@ -43,12 +45,40 @@ export function stepProjectile(p, dt, env) {
   return null;
 }
 
+function steerHoming(p, dt, env) {
+  const s = p.weapon.skill;
+  let best = null, bd = s.range ?? 380;
+  for (const c of env.chars) {
+    if (!c.alive || c === p.owner) continue;
+    const d = Math.hypot(c.x - p.x, c.cy - p.y);
+    if (d < bd) { bd = d; best = c; }
+  }
+  if (!best) return;
+  const cur = Math.atan2(p.vy, p.vx), want = Math.atan2(best.cy - p.y, best.x - p.x);
+  let da = want - cur;
+  while (da > Math.PI) da -= Math.PI * 2;
+  while (da < -Math.PI) da += Math.PI * 2;
+  const m = (s.turn ?? 2.5) * dt;
+  const a = cur + Math.max(-m, Math.min(m, da)), sp = Math.hypot(p.vx, p.vy);
+  p.vx = Math.cos(a) * sp;
+  p.vy = Math.sin(a) * sp;
+  p.homing = true;
+}
+
+// 투사체 공통 초기값 (실제 발사와 봇 시뮬레이션이 같이 사용)
+export function projectileProps(weapon, baseRadius = 6) {
+  const s = weapon.skill;
+  const pierce = weapon.behavior === 'pierce';
+  return {
+    radius: baseRadius * (weapon.scale ?? 1),
+    ghost: pierce && !!s?.ghost,
+    pierceLeft: pierce && !s?.ghost ? s.depth || 0 : 0,
+  };
+}
+
 // 봇용: 실제와 같은 물리로 한 발을 끝까지 계산 (지형은 건드리지 않음)
 export function simulateShot(env, x, y, vx, vy, weapon, owner, maxT = 7) {
-  const p = {
-    x, y, vx, vy, weapon, owner, radius: 6 * (weapon.scale ?? 1), armed: false, age: 0, trail: null,
-    pierceLeft: weapon.behavior === 'pierce' ? weapon.skill.depth : 0,
-  };
+  const p = { x, y, vx, vy, weapon, owner, armed: false, age: 0, trail: null, ...projectileProps(weapon, env.projR) };
   const e = { ...env, sim: true };
   const dt = 1 / 60;
   for (let t = 0; t < maxT; t += dt) {

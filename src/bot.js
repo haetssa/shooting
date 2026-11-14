@@ -18,11 +18,14 @@ export function planShot(game, c, rng) {
   const enemies = game.chars.filter((o) => o.alive && o !== c && (c.teamId == null || o.teamId !== c.teamId));
   if (!enemies.length) return null;
 
-  // 스킬 선택
+  // 스킬 선택 (한 턴에 하나: 이미 즉시 스킬을 썼으면 기본 공격)
   let slot = 0;
   const ult = skillOf(c, 3);
-  if (ult && canUse(c, 3) && !['teleport', 'build', 'heal'].includes(ult.type) && rng() < 0.85) slot = 3;
-  else {
+  const free = !game.turnSkill;
+  if (free && ult && canUse(c, 3) && !['teleport', 'build', 'heal', 'shield'].includes(ult.type) && rng() < 0.85) {
+    if (ult.type === 'global') return { slot: 3, instant: true };
+    slot = 3;
+  } else if (free) {
     for (const sl of [1, 2]) {
       const s = skillOf(c, sl);
       if (!s || !canUse(c, sl)) continue;
@@ -30,13 +33,17 @@ export function planShot(game, c, rng) {
         if (c.hp < c.maxHp * 0.4) return { slot: sl, instant: true };
         continue;
       }
-      if (s.type === 'teleport' || s.type === 'build') continue;
+      if (s.type === 'shield') {
+        if (c.hp < c.maxHp * 0.6 && rng() < lv.skill) return { slot: sl, instant: true };
+        continue;
+      }
+      if (s.type === 'teleport' || s.type === 'build' || s.type === 'global') continue;
       if (rng() < lv.skill) { slot = sl; break; }
     }
   }
 
-  const weapon = makeWeapon(c, skillOf(c, slot));
-  const env = { gravity: game.gravity, windAccel: game.wind.accel, terrain: game.terrain, chars: game.chars };
+  const weapon = makeWeapon(c, skillOf(c, slot), slot);
+  const env = { gravity: game.gravity, windAccel: game.wind.accel, terrain: game.terrain, chars: game.chars, projR: game.cfg.projectileRadius };
   // 한 발을 쏘면 어디에 떨어지는지 계산해 상대와의 거리로 점수화 (낮을수록 좋음)
   const score = (target, facing, ang, pow) => {
     const o = game.shotOrigin(c, ang, pow, facing);

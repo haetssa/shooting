@@ -32,7 +32,14 @@ export class Character {
     this.alive = true;
     this.fellOut = false;
     this.fallStartY = 0;
-    this.ult = 0;
+    this.mana = 0;
+    this.hits = 0;      // 기본 공격 적중 횟수 (궁극기 해금)
+    this.ultNeed = 2;
+    this.shield = 0;    // 받는 피해 감소 비율 (다음 내 턴까지)
+    this.airDir = 0;    // 공중 좌우 조작 (-1, 0, 1)
+    this.car = false;   // 안전 착지 패시브 변신 중
+    this.netControlled = false;
+    this.dealt = 0;     // 이번 경기에서 상대에게 준 피해 (통계)
     this.lastAngle = null;
     this.lastPower = null;
     this.walking = false;
@@ -109,11 +116,13 @@ export class Character {
     return true;
   }
 
-  jump(m) {
+  // dir: 누르고 있는 방향 (0이면 제자리 점프)
+  jump(m, dir = 0) {
     if (!this.grounded || this.fuel < m.jumpFuelCost) return false;
     this.fuel -= m.jumpFuelCost;
     this.grounded = false;
-    this.vx = this.facing * m.jumpVx;
+    if (dir) this.facing = dir;
+    this.vx = dir * m.jumpVx;
     this.vy = -m.jumpVy;
     this.fallStartY = this.y;
     return true;
@@ -132,7 +141,7 @@ export class Character {
 
   takeDamage(n) {
     if (!this.alive) return 0;
-    const d = Math.min(this.hp, Math.max(0, Math.round(n * this.dmgMult)));
+    const d = Math.min(this.hp, Math.max(0, Math.round(n * this.dmgMult * (1 - this.shield))));
     this.hp -= d;
     this.hurt = 0.35;
     if (this.hp <= 0) { this.hp = 0; this.alive = false; }
@@ -146,6 +155,8 @@ export class Character {
     if (!this.alive) this.deadT += dt;
     if (this.throwT >= 0) { this.throwT += dt; if (this.throwT > 0.45) this.throwT = -1; }
     if (this.landT > 0) this.landT -= dt;
+    // 온라인 참가자가 자기 차례에 직접 움직이는 중이면 방장은 받은 위치만 쓴다
+    if (this.netControlled) return null;
 
     if (this.grounded) {
       if (!terrain.isSolid(this.x, this.y + 1)) {
@@ -159,7 +170,19 @@ export class Character {
     }
     if (this.grounded) return null;
 
-    this.vy = Math.min(this.vy + cfg.gravity * dt, cfg.maxFallSpeed);
+    // 공중 좌우 조작: 누르는 방향으로 수평 속도를 서서히 맞춘다
+    if (this.airDir && cfg.move) {
+      const target = this.airDir * cfg.move.airSpeed, a = cfg.move.airAccel * dt;
+      this.vx += Math.max(-a, Math.min(a, target - this.vx));
+      this.facing = this.airDir;
+    }
+    let maxV = cfg.maxFallSpeed;
+    const pv = this.def.passive;
+    if (pv?.type === 'safe_landing' && this.alive) {
+      if (!this.car && this.vy > 0 && this.y - this.fallStartY > 60) this.car = true;
+      if (this.car) maxV = pv.value;
+    }
+    this.vy = Math.min(this.vy + cfg.gravity * dt, maxV);
     const steps = Math.max(1, Math.ceil((Math.max(Math.abs(this.vx), Math.abs(this.vy)) * dt) / 2));
     let landed = false;
     for (let i = 0; i < steps; i++) {
@@ -187,7 +210,9 @@ export class Character {
       this.vy = 0;
       this.landT = 0.12;
       const fall = this.y - this.fallStartY;
-      if (this.alive && fall > cfg.fall.safeHeight) {
+      const safe = this.car || this.def.passive?.type === 'safe_landing';
+      this.car = false;
+      if (this.alive && !safe && fall > cfg.fall.safeHeight) {
         return { type: 'fall', amount: Math.round((fall - cfg.fall.safeHeight) * cfg.fall.damagePerPx) };
       }
       return null;
@@ -218,12 +243,74 @@ export class Character {
 
   draw(ctx, time) {
     if (this.fellOut) return;
+    if (this.car) { this.drawCar(ctx, time); return; }
     if (this.sprite) {
-      // 온라인 참가자는 방장이 보낸 프레임 번호(netFrame)로 그린다
+      // 온라인 참가자는 방장이 보낸 프레임 번호(netFrame)로 그린다 (내 차례에는 직접 계산)
       drawFrame(ctx, this.sprite, this.netFrame ?? this.animFrame(time), this.x, this.y + 1, this.spriteH, this.facing);
-      return;
+    } else this.drawPlaceholder(ctx, time);
+    if (this.shield > 0 && this.alive) this.drawShield(ctx, time);
+  }
+
+  drawShield(ctx, time) {
+    const r = this.spriteH * 0.62 + Math.sin(time * 4) * 2;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y - this.spriteH * 0.48, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(140,210,255,0.18)';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(200,236,255,0.85)';
+    ctx.stroke();
+  }
+
+  // 안전 착지 패시브: 빨간 로드스터를 타고 천천히 내려온다
+  drawCar(ctx, time) {
+    if (this.sprite) {
+      const A = this.sprite.meta.anims;
+      drawFrame(ctx, this.sprite, A.idle[0], this.x - this.facing * 4, this.y - 14, this.spriteH * 0.7, this.facing);
     }
-    this.drawPlaceholder(ctx, time);
+    ctx.save();
+    ctx.translate(this.x, this.y - 6);
+    ctx.scale(this.facing, 1);
+    ctx.lineJoin = 'round';
+    // 바람 줄기 (낙하 표현)
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    for (let k = -1; k <= 1; k++) {
+      const o = ((time * 160 + k * 37) % 30);
+      ctx.beginPath();
+      ctx.moveTo(k * 16, -36 - o);
+      ctx.lineTo(k * 16, -50 - o);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(-34, 0);
+    ctx.lineTo(-34, -12);
+    ctx.quadraticCurveTo(-26, -18, -12, -18);
+    ctx.lineTo(4, -18);
+    ctx.lineTo(14, -10);
+    ctx.quadraticCurveTo(32, -10, 36, -4);
+    ctx.lineTo(36, 0);
+    ctx.closePath();
+    ctx.fillStyle = '#e8342b';
+    ctx.fill();
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = OUTLINE;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(-26, -14, 26, 3);
+    for (const wx of [-22, 22]) {
+      ctx.beginPath();
+      ctx.arc(wx, 1, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#23252e';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(wx, 1, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#c9ced8';
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // 임시 그림 (캡슐 + 눈). 쓰러지면 뒤쪽으로 눕는다.

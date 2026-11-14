@@ -46,7 +46,9 @@ export function sliceSheet(img, options = {}) {
   sctx.drawImage(img, 0, 0);
   const d = sctx.getImageData(0, 0, W, H).data;
   const N = W * H;
+  if (o.grid) removeGridLines(d, W, H);
   const key = sampleBorder(d, W, H);
+  if (o.grid) paintGridLines(d, W, H, key);
 
   // 1. 크로마키
   const alpha = new Uint8Array(N);
@@ -172,6 +174,40 @@ export function sliceSheet(img, options = {}) {
   };
   const report = { size: [W, H], key, blobs: blobs.length, merged, dropped, rows: counts, warnings };
   return { atlas, meta, frames, report };
+}
+
+// grid 옵션: 칸 사이 흰 선(가로/세로로 길게 이어진 밝은 줄)을 찾아 표시해 두고, 배경색으로 칠한다
+let gridMask = null;
+function removeGridLines(d, W, H) {
+  const white = (p) => d[p] > 215 && d[p + 1] > 215 && d[p + 2] > 215;
+  gridMask = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    let n = 0;
+    for (let x = 0; x < W; x++) if (white((y * W + x) * 4)) n++;
+    if (n > W * 0.55) for (let x = 0; x < W; x++) gridMask[y * W + x] = 1;
+  }
+  for (let x = 0; x < W; x++) {
+    let n = 0;
+    for (let y = 0; y < H; y++) if (white((y * W + x) * 4)) n++;
+    if (n > H * 0.55) for (let y = 0; y < H; y++) gridMask[y * W + x] = 1;
+  }
+  // 선 양옆 1~2px 안티에일리어싱 번짐도 포함
+  const grow = gridMask.slice();
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (!gridMask[y * W + x]) continue;
+      for (let k = -2; k <= 2; k++) {
+        if (x + k >= 0 && x + k < W) grow[y * W + x + k] = 1;
+        if (y + k >= 0 && y + k < H) grow[(y + k) * W + x] = 1;
+      }
+    }
+  }
+  gridMask = grow;
+  for (let i = 0; i < W * H; i++) if (gridMask[i]) { d[i * 4] = 255; d[i * 4 + 1] = 0; d[i * 4 + 2] = 255; }
+}
+function paintGridLines(d, W, H, key) {
+  for (let i = 0; i < W * H; i++) if (gridMask[i]) { d[i * 4] = key[0]; d[i * 4 + 1] = key[1]; d[i * 4 + 2] = key[2]; }
+  gridMask = null;
 }
 
 function sampleBorder(d, W, H) {

@@ -22,7 +22,6 @@
     <div class="pad left">
       <button id="btn-left" class="ctl" aria-label="왼쪽">◀</button>
       <button id="btn-right" class="ctl" aria-label="오른쪽">▶</button>
-      <button id="btn-jump" class="ctl small">점프</button>
     </div>
     <div class="pad right">
       <div class="skills">
@@ -30,7 +29,16 @@
         <button id="btn-skill2" class="ctl skill">스킬2</button>
         <button id="btn-ult" class="ctl skill ult">궁극기</button>
       </div>
-      <button id="btn-fire" class="ctl fire">발사</button>
+      <div class="firecol">
+        <button id="btn-jump" class="ctl small jump">점프</button>
+        <button id="btn-fire" class="ctl fire">발사</button>
+      </div>
+    </div>
+    <div id="tutorial" class="hidden">
+      <div class="tut-head"><span>🎓 튜토리얼</span><span id="tut-step"></span></div>
+      <div id="tut-text"></div>
+      <div id="tut-wait" class="sub hidden">내 차례가 되면 계속돼요</div>
+      <button id="tut-next" class="chip small">다음</button>
     </div>
     <div id="chatbar" class="hidden">
       <div class="chatrow">
@@ -54,6 +62,7 @@
     <div class="menu">
       <button id="btn-online" class="big">🌐 온라인 대전</button>
       <button id="btn-play-local" class="big alt">🎮 혼자 · 한 화면 대전</button>
+      <button id="btn-tutorial" class="big tut">🎓 튜토리얼 (처음이라면!)</button>
     </div>
     <div class="row">
       <button id="btn-help" class="chip small">📖 게임 방법</button>
@@ -94,14 +103,15 @@
     <div class="setup-head"><button id="btn-help-back" class="chip small">← 뒤로</button><h2>게임 방법</h2></div>
     <div class="helpdoc">
       <section><h3>🎯 목표</h3><p>차례대로 포탄을 던져 상대를 쓰러뜨리세요. 마지막까지 살아남은 사람이 승리! 섬 아래 빈 공간으로 떨어지면 즉시 탈락이에요.</p></section>
-      <section><h3>🔄 내 차례</h3><p>한 턴은 <b>30초</b>. 이동 → 조준 → 발사 순서로 진행해요. 이동은 아래쪽 <b>연료</b> 만큼만 할 수 있어요. 발사하면 턴이 끝나요.</p></section>
-      <section><h3>📱 조작 (모바일)</h3><p>◀ ▶ 이동 · 점프 · <b>화면 위아래 드래그 = 각도</b> · <b>발사 버튼을 누르고 있다가 떼기 = 파워</b> (오래 누를수록 멀리) · 두 손가락 = 화면 이동/확대</p></section>
+      <section><h3>🔄 내 차례</h3><p>한 턴은 <b>30초</b>. 이동 → 조준 → 발사 순서로 진행해요. 이동은 아래쪽 <b>초록 연료</b> 만큼만 할 수 있어요. 발사하면 턴이 끝나요.</p></section>
+      <section><h3>📱 조작 (모바일)</h3><p>◀ ▶ 이동 · 발사 버튼 위 점프 (공중에서도 ◀ ▶ 로 방향 조절) · <b>화면 위아래 드래그 = 각도</b> · <b>발사 버튼을 누르고 있다가 떼기 = 파워</b> · 두 손가락 = 화면 이동/확대 · 미니맵 터치 = 그곳 보기</p></section>
       <section><h3>⌨️ 조작 (PC)</h3><p>←→ 이동 · ↑↓ 또는 마우스 드래그 = 각도 · 스페이스 = 파워 · W = 점프 · 1/2/3 = 스킬1/스킬2/궁극기 · 우클릭 드래그 = 화면 이동 · 휠 = 확대</p></section>
-      <section><h3>🌬️ 바람</h3><p>위쪽 바람 표시의 화살표 방향으로 포탄이 밀려요. 바람은 <b>실시간으로 계속 변해요</b>. 숫자가 클수록 세요.</p></section>
-      <section><h3>✨ 스킬</h3><p>오른쪽 스킬 버튼을 누르면 <b>다음 발사에 적용</b>돼요 (다시 누르면 취소). 한 턴에 하나만, 쓰고 나면 몇 턴 기다려야 해요. 버튼을 <b>길게 누르면 설명</b>이 나와요.</p></section>
-      <section><h3>💜 궁극기</h3><p>피해를 주거나 받으면 게이지가 차요 (플레이어 목록의 보라색 줄). <b>100이 되면 궁극기 버튼이 빛나요 → 누르고 발사!</b></p></section>
+      <section><h3>🌬️ 바람</h3><p>위쪽 바람 표시의 화살표 방향으로 포탄이 밀려요. 턴마다 바뀌고 조금씩 출렁여요. 숫자가 클수록 세요.</p></section>
+      <section><h3>🎯 조준 도우미</h3><p>내 차례에는 <b>지난번 궤적이 흰 점선</b>으로, 지난번 파워가 게이지 위 흰 삼각형으로 보여요. 보고 조절하세요!</p></section>
+      <section><h3>💧 마나 &amp; 스킬</h3><p>파란 줄이 마나. 시간이 지나면 조금씩 차고 상대를 맞히면 더 차요. 스킬 버튼을 누르면 마나를 써서 <b>다음 발사에 적용</b> (다시 누르면 취소). 한 턴에 하나만. 버튼을 <b>길게 누르면 설명</b>.</p></section>
+      <section><h3>💜 궁극기</h3><p><b>기본 공격으로 상대를 2번 맞히면 해금</b>(목록에 ★ 표시), 그다음부터 마나로 사용해요.</p></section>
       <section><h3>💥 피해</h3><p>폭발 중심에 가까울수록 큰 피해, 직접 맞히면 보너스. 높은 곳에서 떨어지면 낙하 피해가 있어요. 폭발하면 땅이 파여요.</p></section>
-      <section><h3>🗺️ 맵 규칙</h3><p>도시: 기본 · 화성 기지: 중력 약함 · 설원: 강풍 · 사막 유적: 구멍이 크게 파임 · 우주 정거장: 중력 매우 약함, 바람 없음</p></section>
+      <section><h3>🗺️ 맵 규칙</h3><p>도시/야경 도시: 기본 · 화성: 중력 약함 · 설원: 바람 강함 · 정글: 바람 약함 · 사막/화산: 구멍이 크게 파임 · 우주: 중력 약함, 바람 없음. 경기 시작 때 안내가 떠요.</p></section>
       <section><h3>🎲 랜덤 &amp; 히든</h3><p>캐릭터를 랜덤으로 고르면 낮은 확률로 <b>히든 캐릭터</b>가 나와요!</p></section>
     </div>
   </div>
@@ -150,6 +160,12 @@
     </div>
   </div>
 
+  <!-- 캐릭터 통계 (?screen=stats) -->
+  <div id="screen-stats" class="overlay scroll hidden">
+    <div class="setup-head"><button id="btn-stats-back" class="chip small">← 뒤로</button><h2>캐릭터 승률 통계</h2></div>
+    <div id="stats-body"></div>
+  </div>
+
   <!-- 결과 -->
   <div id="screen-over" class="overlay hidden">
     <h1 id="over-title">승리!</h1>
@@ -184,7 +200,7 @@
   <script>
   (async () => {
     const MODULES = ['main', 'screens', 'util', 'sprites', 'turn', 'wind', 'camera', 'skills', 'audio', 'effects', 'projectiles',
-      'terrain', 'background', 'roster', 'physics', 'bot', 'character', 'ui', 'input', 'net/online', 'net/sync', 'net/filter'];
+      'terrain', 'background', 'roster', 'physics', 'bot', 'character', 'ui', 'input', 'tutorial', 'net/online', 'net/sync', 'net/filter'];
     let v = 'dev';
     try { v = (await (await fetch('version.json?t=' + Date.now(), { cache: 'no-store' })).json()).v || 'dev'; } catch (e) {}
     window.APP_VERSION = v;

@@ -36,6 +36,28 @@
       "tolerance": 95,
       "flip": [18],
       "ignore": [[0.75, 0.93, 1, 1]]
+    },
+    {
+      "id": "elonstark",
+      "src": "../캐릭터/일론머스크.jpg",
+      "tolerance": 95
+    },
+    {
+      "id": "hyeoksinman",
+      "src": "../캐릭터/스티브 잡스.jpg",
+      "tolerance": 95
+    },
+    {
+      "id": "northpigs",
+      "src": "../캐릭터/김정은.jpg",
+      "tolerance": 95
+    },
+    {
+      "id": "ariana",
+      "src": "../캐릭터/아리아나 그란데.png",
+      "tolerance": 100,
+      "grid": true,
+      "ignore": [[0.82, 0.88, 1, 1]]
     }
   ]
 }

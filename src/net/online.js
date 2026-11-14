@@ -8,6 +8,8 @@
 //   rooms/{roomId}/players/{uid}  { name, char, ready, joinedAt }
 //   rooms/{roomId}/chat/{id}  { u, n, t, s(시스템), ts }
 //   rooms/{roomId}/bye/{uid}  스스로 나간 경우 표시 (강제종료와 구분)
+//   rooms/{roomId}/kicked/{uid} 방장이 강퇴한 플레이어 (다시 못 들어옴)
+//   stats/{id}                경기 결과 { v, bv, map, at, p: [{ c(캐릭터 id), w(승리 1/0), d(준 피해) }] } → 캐릭터 승률 통계
 //   rooms/{roomId}/game/start 게임 시작 정보, game/snap 상태 스냅샷, game/ev/{id} 이벤트 묶음
 //   rooms/{roomId}/input/{uid} 참가자 입력 상태
 
@@ -48,15 +50,17 @@ export class Online {
   r(path) { return path ? this.f.ref(this.db, path) : this.f.ref(this.db); }
 
   // 접속: 인원이 가득 찼으면 { full: true }
+  async init() {
+    if (this.db) return;
+    const [app, dbm] = await Promise.all([import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-database.js`)]);
+    this.f = dbm;
+    this.app = app.initializeApp(this.fbConfig);
+    this.db = dbm.getDatabase(this.app);
+  }
+
   async connect() {
-    if (!this.db) {
-      const [app, dbm] = await Promise.all([import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-database.js`)]);
-      this.f = dbm;
-      this.app = app.initializeApp(this.fbConfig);
-      this.db = dbm.getDatabase(this.app);
-    } else {
-      this.f.goOnline(this.db);
-    }
+    if (!this.db) await this.init();
+    else this.f.goOnline(this.db);
     const snap = await this.f.get(this.r('presence'));
     const count = snap.exists() ? Object.keys(snap.val()).length : 0;
     if (count >= this.cfg.maxConcurrent) {
@@ -127,6 +131,8 @@ export class Online {
     if ((meta.v || 'dev') !== VERSION) return { error: '방장과 게임 버전이 달라요. 방장도 새로고침해서 최신 버전으로 맞춰 주세요.', update: true };
     if (meta.status !== 'lobby') return { error: '이미 게임이 진행 중인 방이에요.' };
     if (meta.hasPw && meta.pw !== hashPw(id, pw || '')) return { error: '비밀번호가 맞지 않아요.' };
+    const kicked = await f.get(this.r(`rooms/${id}/kicked/${this.uid}`));
+    if (kicked.exists()) return { error: '이 방에서 강퇴되어 들어갈 수 없어요.' };
     const ps = await f.get(this.r(`rooms/${id}/players`));
     const count = ps.exists() ? Object.keys(ps.val()).length : 0;
     if (count >= meta.max) return { error: '방이 가득 찼어요.' };
@@ -165,6 +171,7 @@ export class Online {
     this.roomSubs.push(f.onValue(this.r(`rooms/${id}/meta`), (s) => cbs.meta(s.val())));
     this.roomSubs.push(f.onValue(this.r(`rooms/${id}/players`), (s) => cbs.players(s.val() || {})));
     this.roomSubs.push(f.onValue(this.r(`rooms/${id}/bye`), (s) => cbs.bye?.(s.val() || {})));
+    this.roomSubs.push(f.onValue(this.r(`rooms/${id}/kicked`), (s) => cbs.kicked?.(s.val() || {})));
     this.roomSubs.push(f.onChildAdded(f.query(this.r(`rooms/${id}/chat`), f.limitToLast(30)), (s) => cbs.chat(s.val())));
   }
 
@@ -194,6 +201,36 @@ export class Online {
     const up = {};
     for (const u of uids) if (u !== this.uid) up[`rooms/${this.room.id}/players/${u}/ready`] = false;
     return this.f.update(this.r(''), up);
+  }
+
+  // 방장: 강퇴 (플레이어 목록에서 지우고 다시 못 들어오게 표시)
+  kick(uid) {
+    if (!this.room?.host || uid === this.uid) return;
+    const id = this.room.id;
+    return this.f.update(this.r(''), { [`rooms/${id}/kicked/${uid}`]: true, [`rooms/${id}/players/${uid}`]: null });
+  }
+
+  // 강퇴당한 참가자: 방 연결만 정리 (방 데이터는 방장이 이미 지움)
+  dropRoom() {
+    if (!this.room) return;
+    const me = this.r(`rooms/${this.room.id}/players/${this.uid}`);
+    this.f.onDisconnect(me).cancel().catch(() => {});
+    this.unwatchRoom();
+    this.unwatchGame();
+    this.room = null;
+  }
+
+  // ---------- 통계 ----------
+
+  recordMatch(data) {
+    return this.f.push(this.r('stats'), { ...data, at: this.f.serverTimestamp() });
+  }
+
+  async fetchStats() {
+    await this.init();
+    this.f.goOnline(this.db);
+    const s = await this.f.get(this.r('stats'));
+    return s.exists() ? Object.values(s.val()) : [];
   }
 
   sendChat(name, text, sys = false) {

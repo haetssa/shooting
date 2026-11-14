@@ -22,6 +22,7 @@ export class Camera {
 
   focus(x, y, instant = false) {
     this.manual = false;
+    this.glide = null;
     this.tx = x; this.ty = y;
     if (instant) { this.x = x; this.y = y; }
   }
@@ -31,8 +32,15 @@ export class Camera {
     this.tx = x; this.ty = y;
   }
 
+  // 수동 모드로 전환하면서 (x, y)로 부드럽게 이동 (미니맵 터치)
+  lookAt(x, y) {
+    this.manual = true;
+    this.glide = { x, y };
+  }
+
   pan(dx, dy) {
     this.manual = true;
+    this.glide = null;
     this.x -= dx / this.zoom;
     this.y -= dy / this.zoom;
     this.clamp();
@@ -48,6 +56,12 @@ export class Camera {
   }
 
   update(dt) {
+    if (this.manual && this.glide) {
+      const k = 1 - Math.exp(-dt * 8);
+      this.x += (this.glide.x - this.x) * k;
+      this.y += (this.glide.y - this.y) * k;
+      if (Math.hypot(this.glide.x - this.x, this.glide.y - this.y) < 2) this.glide = null;
+    }
     if (!this.manual) {
       const k = 1 - Math.exp(-dt * 5);
       this.x += (this.tx - this.x) * k;

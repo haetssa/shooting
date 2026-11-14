@@ -1,6 +1,7 @@
 // 입력: 화면 버튼(터치/마우스 공통 Pointer Events), 키보드, 캔버스 드래그/핀치
 // 캔버스 한 손가락 드래그 = 각도 (내 조준 단계일 때) / 화면 이동 (그 외)
 // 두 손가락 = 화면 이동 + 확대, 마우스 우클릭 드래그 = 화면 이동, 휠 = 확대
+// 한 손가락 터치는 먼저 hooks.onTap 에 물어본다 (미니맵, 순간이동 위치 지정)
 
 export class Input {
   constructor(canvas, hooks) {
@@ -83,6 +84,8 @@ export class Input {
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 1) {
         const mousePan = e.pointerType === 'mouse' && e.button !== 0;
+        // 순간이동 위치 지정, 미니맵 터치 등은 여기서 처리하고 드래그 모드는 시작하지 않음
+        if (!mousePan && this.hooks.onTap?.(e.clientX, e.clientY)) { mode = 'none'; return; }
         mode = mousePan || !this.hooks.canAim() ? 'pan' : 'aim';
       } else if (pts.size === 2) {
         mode = 'multi';
