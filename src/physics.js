@@ -21,7 +21,9 @@ export function stepProjectile(p, dt, env) {
     p.y += sy;
     if (!p.armed) {
       const o = p.owner;
-      if (!o.alive || Math.hypot(p.x - o.x, p.y - o.cy) > o.radius + p.radius + 2) p.armed = true;
+      // 쏜 사람 판정(캡슐) 밖으로 완전히 나가야 무장 → 그 전엔 자기 몸에 안 맞는다
+      const oy = o.nearestY ? o.nearestY(p.y) : o.cy;
+      if (!o.alive || Math.hypot(p.x - o.x, p.y - oy) > o.radius + p.radius + 2) p.armed = true;
     }
     for (const c of env.chars) {
       if (!c.alive || (c === p.owner && !p.armed)) continue;
