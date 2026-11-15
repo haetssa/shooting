@@ -1,14 +1,23 @@
-// 화면(DOM) 관리: 타이틀, 닉네임, 대전 설정, 튜토리얼 시작, 게임 방법, 캐릭터 도감/상세, 온라인 로비/방(강퇴), 결과, 통계, 게임 중 버튼/채팅
-import { RANDOM, visibleIndices, resolveChar } from './roster.js';
+// 화면(DOM) 관리: 타이틀, 닉네임(운영자 코드), 대전 설정, 튜토리얼 시작, 게임 방법, 캐릭터 도감/상세, 온라인 로비/방(강퇴),
+// 피드백·버그 신고, 결과, 통계(기간/패치별), 피드백 확인(운영자), 게임 중 버튼/채팅
+import { RANDOM, visibleIndices, adminIndices, resolveChar } from './roster.js';
 import { BOT_LABELS } from './bot.js';
 import { Online } from './net/online.js';
 import { cleanChat } from './net/filter.js';
 import { skillOf, blockReason, manaCost } from './skills.js';
-import { mulberry32, VERSION, latestVersion } from './util.js';
+import { mulberry32, VERSION, latestVersion, sha256Hex } from './util.js';
 import { drawPoster } from './poster.js';
 
 const STORE_KEY = 'pg.profile.v1';
-const SCREENS = ['title', 'name', 'setup', 'help', 'dex', 'lobby', 'room', 'over', 'stats'];
+const SCREENS = ['title', 'name', 'setup', 'help', 'dex', 'lobby', 'room', 'over', 'stats', 'feedback'];
+// 운영자 모드: 닉네임 칸에 운영자 코드를 넣으면 켜진다. 공개 저장소라 코드 원문 대신 해시만 둔다
+// (지인용 수준의 잠금. 코드를 바꾸려면 sha256('influenssa-admin:' + 새 코드) 값으로 교체)
+const ADMIN_SALT = 'influenssa-admin:';
+const ADMIN_HASH = '4a53fe97dfbe6d96220a52b2e31d8f35c006f4dbb8f8ef8263f9f24a873e5cf0';
+const FB_KINDS = { balance: '⚖️ 밸런스 의견', bug: '🐞 버그 신고', etc: '💬 기타' };
+const pad2 = (n) => String(n).padStart(2, '0');
+const fmtTime = (t) => { if (!t) return '-'; const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+const fmtDay = (t) => { const d = new Date(t); return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const TYPE_LABEL = {
@@ -48,6 +57,13 @@ export class Screens {
   }
 
   get nick() { return this.store.nickname || '플레이어'; }
+  get isAdmin() { return !!this.store.admin; }
+
+  // 저장된 마지막 캐릭터 (운영자 전용 캐릭터인데 운영자가 아니면 랜덤)
+  get lastChar() {
+    const c = this.store.lastChar ?? RANDOM;
+    return this.g.charDefs[c]?.adminOnly && !this.isAdmin ? RANDOM : c;
+  }
 
   bind() {
     const g = this.g, on = (id, fn) => $(id).addEventListener('click', fn);
@@ -55,7 +71,14 @@ export class Screens {
     on('btn-edit-name', () => this.showName(false));
     on('btn-play-local', () => this.showSetup());
     on('btn-tutorial', () => this.startTutorial());
-    on('btn-stats-back', () => this.show('title'));
+    on('btn-stats-back', () => this.show(this.statsBack || 'title'));
+    on('admin-badge', () => this.adminOff());
+    on('btn-feedback', () => this.feedbackDialog());
+    on('btn-room-feedback', () => this.feedbackDialog());
+    on('btn-admin-stats', () => this.showStats('lobby'));
+    on('btn-admin-feedback', () => this.showFeedback('lobby'));
+    on('btn-fb-back', () => this.show(this.fbBack || 'lobby'));
+    on('btn-fb-reload', () => this.showFeedback(this.fbBack));
     on('btn-online', () => this.enterOnline());
     on('btn-help', () => this.show('help'));
     on('btn-dex', () => { this.renderDex(); this.show('dex'); });
@@ -113,8 +136,10 @@ export class Screens {
     for (const s of SCREENS) $(`screen-${s}`).classList.toggle('hidden', s !== name);
     if (name === 'title') {
       $('my-name').textContent = this.nick;
+      $('admin-badge').classList.toggle('hidden', !this.isAdmin);
       this.renderPoster();
     }
+    if (name === 'lobby') $('admin-tools').classList.toggle('hidden', !this.isAdmin);
   }
 
   // 타이틀 포스터: 화면 높이에 맞춰 크기를 정하고 그린다 (가로 화면은 메뉴 옆, 좁으면 위)
@@ -146,6 +171,7 @@ export class Screens {
     else if (name === 'dex') { this.renderDex(); this.show('dex'); }
     else if (name === 'lobby') this.enterOnline();
     else if (name === 'stats') this.showStats();
+    else if (name === 'feedback') this.showFeedback('title');
     else if (name === 'ogimage') this.showOgImage();
     else if (SCREENS.includes(name)) this.show(name);
   }
@@ -232,11 +258,34 @@ export class Screens {
   }
 
   confirmName() {
+    const raw = $('name-input').value.trim();
+    // 운영자 코드
+    if (raw.startsWith('##')) {
+      if (sha256Hex(ADMIN_SALT + raw) === ADMIN_HASH) {
+        this.store.admin = true;
+        this.save();
+        this.g.audio.play('ult');
+        $('name-input').value = this.store.nickname || '';
+        $('name-hint').textContent = `👑 운영자 모드가 켜졌어요! ${this.store.nickname ? '확인을 누르면 계속해요.' : '이제 게임에서 쓸 닉네임을 입력해 주세요.'}`;
+      } else {
+        $('name-input').value = '';
+        $('name-hint').textContent = '코드가 맞지 않아요.';
+      }
+      return;
+    }
     const v = cleanChat($('name-input').value, 10);
     if (!v || /^\*+$/.test(v)) { $('name-hint').textContent = '닉네임을 한 글자 이상 입력해 주세요.'; return; }
     this.store.nickname = v;
     this.save();
     $('name-input').blur();
+    this.show('title');
+  }
+
+  async adminOff() {
+    if (!(await this.confirm('운영자 모드', '운영자 모드를 끌까요? (닉네임 칸에 코드를 다시 넣으면 켜져요)', '끄기'))) return;
+    this.store.admin = false;
+    if (this.g.charDefs[this.store.lastChar]?.adminOnly) this.store.lastChar = RANDOM;
+    this.save();
     this.show('title');
   }
 
@@ -247,7 +296,7 @@ export class Screens {
     container.innerHTML = '';
     const make = (idx, name, img) => {
       const b = document.createElement('button');
-      b.className = 'card' + (selected === idx ? ' on' : '');
+      b.className = 'card' + (selected === idx ? ' on' : '') + (g.charDefs[idx]?.adminOnly ? ' admin' : '');
       if (img) {
         const im = document.createElement('img');
         im.src = img;
@@ -273,6 +322,7 @@ export class Screens {
       container.appendChild(b);
     };
     for (const i of visibleIndices(g.charDefs)) make(i, g.charDefs[i].name, g.portraitUrls[i]);
+    if (this.isAdmin) for (const i of adminIndices(g.charDefs)) make(i, `👑 ${g.charDefs[i].name}`, g.portraitUrls[i]);
     if (random) make(RANDOM, '랜덤', null);
   }
 
@@ -287,8 +337,9 @@ export class Screens {
     const d = this.g.charDefs[idx];
     const sec = (tag, cls, s, extra = '') => s ? `<div class="dsec"><span class="tag ${cls}">${tag}</span><b>${esc(s.name)}</b>${s.type ? ` <small>${TYPE_LABEL[s.type] || ''}</small>` : ''}<br>${esc(s.desc || '')}${extra}</div>` : '';
     const pv = d.passive, disc = pv?.type === 'skill_discount' ? pv.value : 0;
+    const free = !!d.god?.freeSkills;
     const cost = (s) => Math.round((s.mana ?? 35) * (1 - disc));
-    const cd = (s) => s ? `<br><small>마나 ${cost(s)}${s.cooldown ? ` · ${s.cooldown}턴에 한 번` : ''}</small>` : '';
+    const cd = (s) => !s ? '' : free ? '<br><small>제한 없음</small>' : `<br><small>마나 ${cost(s)}${s.cooldown ? ` · ${s.cooldown}턴에 한 번` : ''}</small>`;
     const html = `
       <div class="detail">
         <div class="dtop">
@@ -302,7 +353,7 @@ export class Screens {
         ${d.passive ? `<div class="dsec"><span class="tag passive">패시브</span><b>${esc(d.passive.name)}</b><br>${esc(d.passive.desc)}<br><small>항상 적용돼요</small></div>` : ''}
         ${sec('스킬1', '', d.skills?.[0], cd(d.skills?.[0]))}
         ${sec('스킬2', '', d.skills?.[1], cd(d.skills?.[1]))}
-        ${sec('궁극기', 'ult', d.ultimate, d.ultimate ? `<br><small>마나 ${cost(d.ultimate)} · 기본 공격으로 상대를 ${this.g.cfg.ult.unlockHits}번 맞히면 해금</small>` : '')}
+        ${sec('궁극기', 'ult', d.ultimate, !d.ultimate ? '' : free ? '<br><small>제한 없음</small>' : `<br><small>마나 ${cost(d.ultimate)} · 기본 공격으로 상대를 ${this.g.cfg.ult.unlockHits}번 맞히면 해금</small>`)}
         <p class="sub">사용법: 스킬 버튼을 누르면 다음 발사에 적용돼요 (다시 누르면 취소). 마나는 시간이 지나면 차고, 상대를 맞히면 더 차요. 게임 중 버튼을 길게 누르면 설명이 떠요.</p>
       </div>`;
     this.modal({ title: '캐릭터 정보', html });
@@ -333,7 +384,7 @@ export class Screens {
 
   showSetup() {
     const saved = this.store.players || [];
-    const vis = visibleIndices(this.g.charDefs);
+    const vis = [...visibleIndices(this.g.charDefs), ...(this.isAdmin ? adminIndices(this.g.charDefs) : [])];
     this.setupCount = this.store.playerCount || 2;
     this.setupMap = this.store.map || 'random';
     this.setupPlayers = Array.from({ length: this.g.cfg.maxPlayers }, (_, i) => {
@@ -408,8 +459,9 @@ export class Screens {
     const g = this.g;
     const players = this.setupPlayers.slice(0, this.setupCount).map((p, i) => ({
       name: cleanChat(p.name, 10) || `플레이어 ${i + 1}`,
-      char: resolveChar(g.charDefs, p.char, Math.random, g.cfg.hiddenChance),
+      char: resolveChar(g.charDefs, p.char, Math.random, g.cfg.hiddenChance, this.isAdmin),
       bot: p.bot || 0,
+      admin: i === 0 && this.isAdmin && !p.bot,
     }));
     this.store.playerCount = this.setupCount;
     this.store.map = this.setupMap;
@@ -422,7 +474,7 @@ export class Screens {
 
   startTutorial() {
     const vis = visibleIndices(this.g.charDefs);
-    const ch = vis.includes(this.store.lastChar) ? this.store.lastChar : vis[0];
+    const ch = vis.includes(this.lastChar) ? this.lastChar : vis[0];
     requestFullscreenLandscape();
     this.g.startTutorial(ch);
   }
@@ -440,6 +492,7 @@ export class Screens {
     $('modal').classList.add('hidden');
     $('controls').classList.remove('hidden');
     $('btn-chat').classList.toggle('hidden', this.g.mode === 'local');
+    $('btn-chat').classList.remove('unread');
     this.toggleChatBar(false);
   }
 
@@ -498,7 +551,7 @@ export class Screens {
     const s = c && skillOf(c, slot);
     if (!s) return;
     const why = blockReason(c, slot);
-    const extra = `마나 ${manaCost(c, slot)}${slot === 3 ? ` · 기본 공격 ${c.ultNeed}번 적중 시 해금` : ''}${why ? `<br>⛔ ${esc(why)}` : ''}`;
+    const extra = c.def.god?.freeSkills ? '운영자 권한: 제한 없음' : `마나 ${manaCost(c, slot)}${slot === 3 ? ` · 기본 공격 ${c.ultNeed}번 적중 시 해금` : ''}${why ? `<br>⛔ ${esc(why)}` : ''}`;
     const tip = $('skill-tip');
     tip.innerHTML = `<b>${esc(s.name)}</b><br>${esc(s.desc || '')}<br><small>${extra}</small>`;
     const r = el.getBoundingClientRect();
@@ -515,7 +568,11 @@ export class Screens {
     const bar = $('chatbar');
     const open = force ?? bar.classList.contains('hidden');
     bar.classList.toggle('hidden', !open);
-    if (!open) $('chat-input').blur();
+    if (open) {
+      $('btn-chat').classList.remove('unread');
+      const h = $('chat-history');
+      h.scrollTop = h.scrollHeight;
+    } else $('chat-input').blur();
   }
 
   sendChatFrom(inputId) {
@@ -545,7 +602,15 @@ export class Screens {
     log.appendChild(line);
     while (log.children.length > 60) log.firstChild.remove();
     log.scrollTop = log.scrollHeight;
-    if (this.g.mode !== 'local' && (this.g.state === 'playing' || this.g.state === 'over')) this.g.say(msg.u, msg.n, text, !!msg.s);
+    if (this.g.mode !== 'local' && (this.g.state === 'playing' || this.g.state === 'over')) {
+      this.g.say(msg.u, msg.n, text, !!msg.s);
+      // 💬 창의 대화 기록 (창이 닫혀 있으면 버튼 깜빡임)
+      const h = $('chat-history');
+      h.appendChild(line.cloneNode(true));
+      while (h.children.length > 40) h.firstChild.remove();
+      h.scrollTop = h.scrollHeight;
+      if (!msg.s && msg.u !== this.online?.uid && $('chatbar').classList.contains('hidden')) $('btn-chat').classList.add('unread');
+    }
   }
 
   // ---------- 온라인: 로비 ----------
@@ -644,7 +709,7 @@ export class Screens {
     });
     if (!res) return;
     try {
-      await this.online.createRoom({ ...res, nickname: this.nick, char: this.store.lastChar ?? RANDOM });
+      await this.online.createRoom({ ...res, nickname: this.nick, char: this.lastChar, admin: this.isAdmin });
       this.enterRoom();
     } catch (e) {
       console.error(e);
@@ -664,7 +729,7 @@ export class Screens {
       });
       if (pw == null) return;
     }
-    const res = await this.online.joinRoom(r.id, pw, this.nick, this.store.lastChar ?? RANDOM).catch((e) => ({ error: String(e) }));
+    const res = await this.online.joinRoom(r.id, pw, this.nick, this.lastChar, this.isAdmin).catch((e) => ({ error: String(e) }));
     if (res.update) { if (await this.checkUpdate()) return; }
     if (res.error) return this.alert('입장 실패', res.error);
     this.enterRoom();
@@ -678,8 +743,9 @@ export class Screens {
     this.roomPlayers = {};
     this.byes = {};
     this.kicked = {};
-    this.myChar = this.store.lastChar ?? RANDOM;
+    this.myChar = this.lastChar;
     $('room-chat-log').innerHTML = '';
+    $('chat-history').innerHTML = '';
     on.watchRoom({
       meta: (m) => this.onRoomMeta(m),
       players: (p) => this.onRoomPlayers(p),
@@ -758,7 +824,7 @@ export class Screens {
       const isHost = p.uid === m.host;
       const state = isHost ? '<span class="badge host">방장</span>' : p.ready ? '<span class="badge ready">준비 완료</span>' : '<span class="badge wait">대기 중</span>';
       row.innerHTML = `<span class="pdot" style="background:${g.colors[i % g.colors.length]}"></span>${img}
-        <span class="rpname">${isHost ? '👑 ' : ''}${esc(p.name)}${p.uid === on.uid ? ' <small>(나)</small>' : ''}<br><small>${ci === RANDOM ? '랜덤' : esc(g.charDefs[ci]?.name || '')}</small></span>${state}`;
+        <span class="rpname">${isHost ? '👑 ' : ''}${esc(p.name)}${p.uid === on.uid ? ' <small>(나)</small>' : ''}${p.admin ? ' <span class="badge host">제작자</span>' : ''}<br><small>${ci === RANDOM ? '랜덤' : esc(g.charDefs[ci]?.name || '')}</small></span>${state}`;
       if (host && !isHost && m.status !== 'playing') {
         const kb = document.createElement('button');
         kb.className = 'chip small kick';
@@ -814,7 +880,7 @@ export class Screens {
     if (list.some((p) => p.uid !== m.host && !p.ready)) return this.alert('시작할 수 없어요', '모든 플레이어가 준비해야 시작할 수 있어요.');
     const seed = (Math.random() * 2 ** 32) >>> 0;
     const rng = mulberry32(seed ^ 0x9e3779b9);
-    const players = list.map((p) => ({ uid: p.uid, name: p.name, char: resolveChar(g.charDefs, p.char ?? RANDOM, rng, g.cfg.hiddenChance) }));
+    const players = list.map((p) => ({ uid: p.uid, name: p.name, admin: !!p.admin, char: resolveChar(g.charDefs, p.char ?? RANDOM, rng, g.cfg.hiddenChance, !!p.admin) }));
     let map = m.map;
     if (map === 'random' || !g.maps.find((x) => x.id === map)) map = g.maps[Math.floor(rng() * g.maps.length)].id;
     requestFullscreenLandscape();
@@ -840,13 +906,16 @@ export class Screens {
   recordStats(g, winner) {
     if (!g.cfg.stats?.enabled || !this.online?.room?.host || g.devOnlineBots) return;
     if (g.chars.length < 2) return;
+    if (g.chars.some((c) => c.def.adminOnly)) return; // 운영자 캐릭터가 낀 경기는 밸런스 통계에서 제외
     this.online.recordMatch({
       v: VERSION, bv: g.balanceVersion, map: g.map.id,
       p: g.chars.map((c) => ({ c: c.def.id, w: c === winner ? 1 : 0, d: c.dealt })),
     }).catch((e) => console.warn('통계 기록 실패', e));
   }
 
-  async showStats() {
+  // back: 뒤로 버튼으로 돌아갈 화면
+  async showStats(back = 'title') {
+    this.statsBack = back;
     this.show('stats');
     const box = $('stats-body');
     box.innerHTML = '<p class="sub">불러오는 중…</p>';
@@ -859,32 +928,186 @@ export class Screens {
       return;
     }
     this.statsRows = rows;
-    this.renderStats(String(this.g.balanceVersion));
+    this.statsF ||= { period: 'all', ver: 'all', from: '', to: '' };
+    this.renderStats();
   }
 
-  renderStats(filter) {
-    const g = this.g, rows = this.statsRows || [];
-    const vers = [...new Set(rows.map((r) => String(r.bv ?? '?')))].sort();
-    const sel = rows.filter((r) => filter === 'all' || String(r.bv ?? '?') === filter);
+  // 선택한 기간 [시작, 끝] (ms)
+  statsRange() {
+    const f = this.statsF, day = 86400000, now = Date.now();
+    if (f.period === 'today') { const d = new Date(); d.setHours(0, 0, 0, 0); return [d.getTime(), Infinity]; }
+    if (f.period === '7') return [now - 7 * day, Infinity];
+    if (f.period === '30') return [now - 30 * day, Infinity];
+    if (f.period === 'custom') {
+      return [f.from ? new Date(`${f.from}T00:00:00`).getTime() : -Infinity, f.to ? new Date(`${f.to}T23:59:59`).getTime() + 999 : Infinity];
+    }
+    return [-Infinity, Infinity];
+  }
+
+  aggStats(rows) {
     const agg = {};
-    for (const d of g.charDefs) agg[d.id] = { name: d.name, n: 0, w: 0, dmg: 0 };
-    for (const r of sel) {
+    for (const d of this.g.charDefs) if (!d.adminOnly) agg[d.id] = { id: d.id, name: d.name, n: 0, w: 0, dmg: 0 };
+    for (const r of rows) {
       for (const p of r.p || []) {
-        const a = agg[p.c] || (agg[p.c] = { name: p.c, n: 0, w: 0, dmg: 0 });
+        const a = agg[p.c] || (agg[p.c] = { id: p.c, name: this.g.charDefs.find((d) => d.id === p.c)?.name || p.c, n: 0, w: 0, dmg: 0 });
         a.n++;
         a.w += p.w ? 1 : 0;
         a.dmg += p.d || 0;
       }
     }
-    const list = Object.values(agg).sort((a, b) => (b.n ? b.w / b.n : -1) - (a.n ? a.w / a.n : -1));
-    const opts = ['all', ...vers].map((v) => `<button class="chip small ${v === filter ? 'on' : ''}" data-v="${esc(v)}">${v === 'all' ? '전체' : `밸런스 v${esc(v)}`}</button>`).join('');
+    return agg;
+  }
+
+  renderStats() {
+    const all = this.statsRows || [], f = this.statsF;
+    const [a, b] = this.statsRange();
+    const inPeriod = all.filter((r) => (r.at || 0) >= a && (r.at || 0) <= b);
+    const verOf = (r) => String(r.bv ?? '?');
+    const vers = [...new Set(all.map(verOf))].sort((x, y) => (parseFloat(x) || 0) - (parseFloat(y) || 0));
+    if (f.ver !== 'all' && !vers.includes(f.ver)) f.ver = 'all';
+    const sel = inPeriod.filter((r) => f.ver === 'all' || verOf(r) === f.ver);
+    // 밸런스 버전별 기록 기간 (패치 시점 확인용)
+    const vr = {};
+    for (const r of all) {
+      const v = verOf(r), t = r.at || 0;
+      vr[v] ||= { a: Infinity, b: 0 };
+      vr[v].a = Math.min(vr[v].a, t);
+      vr[v].b = Math.max(vr[v].b, t);
+    }
+    const chip = (attr, v, label, on) => `<button class="chip small ${on ? 'on' : ''}" data-${attr}="${esc(v)}">${label}</button>`;
+    const periods = [['all', '전체 기간'], ['today', '오늘'], ['7', '최근 7일'], ['30', '최근 30일'], ['custom', '직접 지정']];
+    const pct = (x) => (x.n ? `${Math.round((x.w / x.n) * 100)}%` : '-');
+    const list = Object.values(this.aggStats(sel)).sort((p, q) => (q.n ? q.w / q.n : -1) - (p.n ? p.w / p.n : -1));
+
+    // 패치별 승률 변화 (선택한 기간 안에서 버전마다)
+    const tv = vers.filter((v) => inPeriod.some((r) => verOf(r) === v));
+    const per = tv.map((v) => this.aggStats(inPeriod.filter((r) => verOf(r) === v)));
+    const trendRows = list.map((x) => {
+      let prev = null;
+      const cells = per.map((ag) => {
+        const s = ag[x.id];
+        if (!s || !s.n) return '<td>-</td>';
+        const r = s.w / s.n;
+        let arrow = '';
+        if (prev != null) { const d = Math.round((r - prev) * 100); if (d >= 5) arrow = ` <span class="up">▲${d}</span>`; else if (d <= -5) arrow = ` <span class="down">▼${-d}</span>`; }
+        prev = r;
+        return `<td>${Math.round(r * 100)}%${arrow}<br><small>${s.n}판</small></td>`;
+      }).join('');
+      return `<tr><td>${esc(x.name)}</td>${cells}</tr>`;
+    }).join('');
+
     $('stats-body').innerHTML = `
-      <div class="row wrap">${opts}</div>
-      <p class="sub">온라인 경기 ${sel.length}판 기준 · 판수가 적으면(10판 미만) 참고만 하세요</p>
-      <table class="stats"><tr><th>캐릭터</th><th>판수</th><th>승</th><th>승률</th><th>평균 피해</th></tr>
-      ${list.map((a) => `<tr><td>${esc(a.name)}</td><td>${a.n}</td><td>${a.w}</td><td>${a.n ? Math.round((a.w / a.n) * 100) + '%' : '-'}</td><td>${a.n ? Math.round(a.dmg / a.n) : '-'}</td></tr>`).join('')}
-      </table>`;
-    $('stats-body').querySelectorAll('[data-v]').forEach((b) => b.addEventListener('click', () => this.renderStats(b.dataset.v)));
+      <div class="stats-filter"><span class="label">기간</span>${periods.map(([v, l]) => chip('period', v, l, f.period === v)).join('')}</div>
+      ${f.period === 'custom' ? `<div class="stats-filter"><input type="date" id="st-from" value="${esc(f.from)}"> ~ <input type="date" id="st-to" value="${esc(f.to)}"><button class="chip small" id="st-apply">적용</button></div>` : ''}
+      <div class="stats-filter"><span class="label">밸런스</span>${chip('ver', 'all', '전체', f.ver === 'all')}${vers.map((v) => chip('ver', v, `v${esc(v)}${vr[v]?.a < Infinity ? ` <small>(${fmtDay(vr[v].a)}~)</small>` : ''}`, f.ver === v)).join('')}</div>
+      <p class="sub">온라인 경기 ${sel.length}판 기준 · 판수가 적으면(10판 미만) 참고만 하세요 · 현재 밸런스 v${esc(this.g.balanceVersion)}</p>
+      <div class="stats-wrap"><table class="stats"><tr><th>캐릭터</th><th>판수</th><th>승</th><th>승률</th><th>평균 피해</th></tr>
+      ${list.map((x) => `<tr><td>${esc(x.name)}</td><td>${x.n}</td><td>${x.w}</td><td>${pct(x)}</td><td>${x.n ? Math.round(x.dmg / x.n) : '-'}</td></tr>`).join('')}
+      </table></div>
+      ${tv.length > 1 ? `<div class="stats-title">📈 패치별 승률 변화 <small class="sub">(선택한 기간 안, 5%p 이상 변하면 ▲▼)</small></div>
+      <div class="stats-wrap"><table class="stats"><tr><th>캐릭터</th>${tv.map((v) => `<th>v${esc(v)}</th>`).join('')}</tr>${trendRows}</table></div>` : ''}`;
+    const body = $('stats-body');
+    body.querySelectorAll('[data-period]').forEach((el) => el.addEventListener('click', () => { f.period = el.dataset.period; this.renderStats(); }));
+    body.querySelectorAll('[data-ver]').forEach((el) => el.addEventListener('click', () => { f.ver = el.dataset.ver; this.renderStats(); }));
+    $('st-apply')?.addEventListener('click', () => { f.from = $('st-from').value; f.to = $('st-to').value; this.renderStats(); });
+  }
+
+  // ---------- 피드백 · 버그 신고 ----------
+
+  async feedbackDialog() {
+    const g = this.g, fc = g.cfg.feedback || {};
+    if (!this.online?.db) return this.alert('보낼 수 없어요', '온라인 로비에 연결된 상태에서 보낼 수 있어요.');
+    const wait = (fc.cooldown ?? 30) * 1000 - (Date.now() - (this.store.lastFeedbackAt || 0));
+    if (wait > 0) return this.alert('잠시만요', `${Math.ceil(wait / 1000)}초 뒤에 다시 보낼 수 있어요.`);
+    const max = fc.maxLength || 500;
+    let kind = 'balance';
+    const html = `
+      <div class="form">
+        <div class="row wrap" id="fb-kinds">${Object.entries(FB_KINDS).map(([k, l]) => `<button class="chip small ${k === kind ? 'on' : ''}" data-k="${k}">${l}</button>`).join('')}</div>
+        <label>내용 <small>(어떤 캐릭터/맵에서, 어떤 상황이었는지 적어 주면 큰 도움이 돼요)</small><textarea id="fb-text" maxlength="${max}" placeholder="예) 아이작 불법유턴 스킬이 너무 세요 / 화성 협곡에서 캐릭터가 땅에 끼었어요"></textarea></label>
+        <p class="sub left" id="fb-count">0 / ${max}</p>
+        <p id="fb-err" class="err"></p>
+      </div>`;
+    const pr = this.modal({
+      title: '📝 피드백 · 버그 신고', html,
+      buttons: [
+        { label: '취소', value: null },
+        {
+          label: '보내기', primary: true, value: () => {
+            const t = $('fb-text').value.trim().slice(0, max);
+            if (t.length < 2) { $('fb-err').textContent = '내용을 입력해 주세요.'; return undefined; }
+            return { k: kind, t };
+          },
+        },
+      ],
+    });
+    $('fb-kinds').querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => {
+      kind = b.dataset.k;
+      $('fb-kinds').querySelectorAll('[data-k]').forEach((x) => x.classList.toggle('on', x === b));
+    }));
+    $('fb-text').addEventListener('input', () => { $('fb-count').textContent = `${$('fb-text').value.length} / ${max}`; });
+    const res = await pr;
+    if (!res) return;
+    try {
+      await withTimeout(this.online.sendFeedback({
+        k: res.k, t: res.t, n: this.nick, v: VERSION, bv: g.balanceVersion,
+        dev: matchMedia('(pointer: coarse)').matches ? 'mobile' : 'pc',
+      }), 10000);
+      this.store.lastFeedbackAt = Date.now();
+      this.save();
+      this.toast('고마워요! 의견이 전달됐어요 🙏');
+      setTimeout(() => this.toast(null), 2200);
+    } catch (e) {
+      console.error(e);
+      const denied = String(e?.message || e).toLowerCase().includes('permission');
+      this.alert('보내지 못했어요', denied ? '서버 설정이 아직 안 되어 있어요. (관리자: Firebase 보안 규칙에 feedback 항목 추가 필요)' : '잠시 후 다시 시도해 주세요.');
+    }
+  }
+
+  // 운영자: 피드백 목록
+  async showFeedback(back = 'lobby') {
+    this.fbBack = back;
+    this.show('feedback');
+    const box = $('fb-body');
+    box.innerHTML = '<p class="sub">불러오는 중…</p>';
+    if (!this.fb) { box.innerHTML = '<p class="sub">Firebase 설정이 없어요.</p>'; return; }
+    if (!this.online) this.online = new Online(this.g.cfg.online, this.fb);
+    try { this.fbRows = await withTimeout(this.online.fetchFeedback(), 12000); } catch (e) {
+      console.error(e);
+      box.innerHTML = '<p class="sub">불러오지 못했어요. (Firebase 보안 규칙에 feedback 항목이 있는지 확인)</p>';
+      return;
+    }
+    this.fbF ||= { k: 'all', open: false };
+    this.renderFeedback();
+  }
+
+  renderFeedback() {
+    const rows = this.fbRows || [], f = this.fbF;
+    const cnt = (k) => rows.filter((r) => (k === 'all' || r.k === k) && (!f.open || !r.done)).length;
+    const sel = rows.filter((r) => (f.k === 'all' || r.k === f.k) && (!f.open || !r.done));
+    const chips = [['all', '전체'], ...Object.entries(FB_KINDS)].map(([k, l]) => `<button class="chip small ${f.k === k ? 'on' : ''}" data-k="${k}">${l} ${cnt(k)}</button>`).join('');
+    const items = sel.map((r) => `
+      <div class="fbitem ${r.done ? 'done' : ''}">
+        <div class="fbhead"><span class="badge ${esc(r.k)}">${FB_KINDS[r.k] || esc(r.k)}</span><b>${esc(r.n || '익명')}</b><span>${fmtTime(r.at)}</span><span>밸런스 v${esc(r.bv ?? '?')} · ${esc(r.dev || '')}</span>
+          <button class="chip small" data-done="${esc(r.id)}">${r.done ? '↩ 미처리로' : '✔ 처리 완료'}</button></div>
+        <div class="fbtext">${esc(r.t)}</div>
+      </div>`).join('');
+    $('fb-body').innerHTML = `
+      <div class="stats-filter">${chips}<button class="chip small ${f.open ? 'on' : ''}" id="fb-open">미처리만</button></div>
+      <p class="sub">총 ${rows.length}건 · 미처리 ${rows.filter((r) => !r.done).length}건</p>
+      ${items || '<p class="sub">아직 없어요.</p>'}`;
+    const body = $('fb-body');
+    body.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('click', () => { f.k = el.dataset.k; this.renderFeedback(); }));
+    $('fb-open').addEventListener('click', () => { f.open = !f.open; this.renderFeedback(); });
+    body.querySelectorAll('[data-done]').forEach((el) => el.addEventListener('click', async () => {
+      const r = rows.find((x) => x.id === el.dataset.done);
+      if (!r) return;
+      try {
+        await this.online.setFeedbackDone(r.id, !r.done);
+        r.done = !r.done;
+        this.renderFeedback();
+      } catch (e) { console.error(e); this.alert('실패', '저장하지 못했어요.'); }
+    }));
   }
 
   async leaveRoomFlow() {

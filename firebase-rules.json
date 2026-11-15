@@ -16,6 +16,13 @@
         ".validate": "!newData.exists() || (newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('max').isNumber() && newData.child('max').val() <= 6)"
       }
     },
+    "feedback": {
+      ".read": true,
+      "$id": {
+        ".write": "newData.exists() && (!data.exists() || newData.child('t').val() === data.child('t').val())",
+        ".validate": "newData.hasChildren(['k', 't', 'at']) && newData.child('t').isString() && newData.child('t').val().length <= 600 && newData.child('k').isString() && newData.child('k').val().length <= 10"
+      }
+    },
     "stats": {
       ".read": true,
       "$id": {

@@ -65,7 +65,7 @@ export function drawPoster(canvas, game, w, h, dpr = 1) {
   }
 
   // 캐릭터: 뒷줄(작게) + 앞줄(크게), 왼쪽 절반은 오른쪽, 오른쪽 절반은 왼쪽을 본다
-  const idx = game.charDefs.map((d, i) => (d.hidden ? -1 : i)).filter((i) => i >= 0 && game.sprites[i]);
+  const idx = game.charDefs.map((d, i) => (d.hidden || d.adminOnly ? -1 : i)).filter((i) => i >= 0 && game.sprites[i]);
   const back = idx.filter((_, k) => k % 2 === 1), front = idx.filter((_, k) => k % 2 === 0);
   const row = (list, y, hgt, spread) => {
     list.forEach((i, k) => {

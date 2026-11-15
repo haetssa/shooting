@@ -2,7 +2,9 @@
 // 스프라이트가 없으면 임시 캡슐 그림으로 대체한다.
 import { OUTLINE } from './terrain.js';
 import { drawFrame } from './sprites.js';
-import { damageTakenMult } from './skills.js';
+import { damageTakenMult, knockbackTakenMult } from './skills.js';
+
+const MAX_KNOCK_VX = 380; // 여러 번 연달아 맞아도 수평 속도는 이 이상 안 쌓임
 
 export class Character {
   constructor(def, player, sprite = null) {
@@ -26,6 +28,7 @@ export class Character {
     this.w = 34;
     this.h = Math.round(this.spriteH * 0.78);
     this.radius = Math.round(this.spriteH * 0.34);
+    this.capsule = false;
     this.grounded = false;
     this.facing = 1;
     this.angle = 45;
@@ -52,6 +55,13 @@ export class Character {
     // 스킬
     this.cooldowns = [0, 0];
     this.dmgMult = damageTakenMult(def);
+    this.kbMult = knockbackTakenMult(def);
+    // 운영자 전용 캐릭터 능력 (characters.json god 필드)
+    this.maxJumps = def.god?.jumps || 1;
+    this.jumpsLeft = 0;
+    this.noFall = def.passive?.type === 'safe_landing' || !!def.god?.noFallDamage;
+    // 운영자(제작자)가 조종하는 캐릭터: 오오라 + 제작자 표시
+    this.admin = !!player.admin;
     // 봇 (0 = 사람, 1~3 = 난이도)
     this.botLevel = player.bot || 0;
     this.isBot = this.botLevel > 0;
@@ -69,8 +79,21 @@ export class Character {
 
   startThrow() { this.throwT = 0; }
 
+  // 판정 크기 (config.hitbox): radiusMult 반지름 배율, capsule 이면 머리부터 발까지 덮는 세로 캡슐
+  setHitbox(hb = {}) {
+    this.radius = Math.round(this.spriteH * 0.34 * (hb.radiusMult ?? 1));
+    this.capsule = hb.capsule !== false;
+  }
+
+  // 판정 중심선에서 py 에 가장 가까운 y (캡슐이 아니면 몸 중심)
+  nearestY(py) {
+    if (!this.capsule) return this.cy;
+    const bot = this.y - this.radius, top = Math.min(this.y - this.spriteH + this.radius, bot);
+    return py < top ? top : py > bot ? bot : py;
+  }
+
   hitTest(px, py, pr) {
-    const dx = px - this.x, dy = py - this.cy;
+    const dx = px - this.x, dy = py - this.nearestY(py);
     const r = this.radius + pr;
     return dx * dx + dy * dy < r * r;
   }
@@ -83,6 +106,7 @@ export class Character {
     while (terrain.isSolid(x, this.y)) this.y--;
     this.grounded = true;
     this.vx = this.vy = 0;
+    this.jumpsLeft = this.maxJumps - 1;
   }
 
   walk(dir, dt, terrain, m) {
@@ -110,17 +134,22 @@ export class Character {
       this.vx = dir * m.speed * 0.8;
       this.vy = 0;
       this.fallStartY = this.y;
+      this.jumpsLeft = this.maxJumps - 1;
     } else {
       this.y = ny;
     }
     return true;
   }
 
-  // dir: 누르고 있는 방향 (0이면 제자리 점프)
+  // dir: 누르고 있는 방향 (0이면 제자리 점프). 운영자 캐릭터는 공중에서도 maxJumps 번까지 연속 점프
   jump(m, dir = 0) {
-    if (!this.grounded || this.fuel < m.jumpFuelCost) return false;
+    if (this.fuel < m.jumpFuelCost || !this.alive) return false;
+    if (this.grounded) this.jumpsLeft = this.maxJumps - 1;
+    else if (this.jumpsLeft > 0) this.jumpsLeft--;
+    else return false;
     this.fuel -= m.jumpFuelCost;
     this.grounded = false;
+    this.car = false;
     if (dir) this.facing = dir;
     this.vx = dir * m.jumpVx;
     this.vy = -m.jumpVy;
@@ -130,7 +159,9 @@ export class Character {
 
   knock(kx, ky) {
     if (this.fellOut) return;
-    this.vx += kx;
+    kx *= this.kbMult;
+    ky *= this.kbMult;
+    this.vx = Math.max(-MAX_KNOCK_VX, Math.min(MAX_KNOCK_VX, this.vx + kx));
     this.vy += ky;
     if (Math.hypot(kx, ky) > 40) {
       if (this.grounded) this.vy = Math.min(this.vy, -80);
@@ -210,7 +241,8 @@ export class Character {
       this.vy = 0;
       this.landT = 0.12;
       const fall = this.y - this.fallStartY;
-      const safe = this.car || this.def.passive?.type === 'safe_landing';
+      const safe = this.car || this.noFall;
+      this.jumpsLeft = this.maxJumps - 1;
       this.car = false;
       if (this.alive && !safe && fall > cfg.fall.safeHeight) {
         return { type: 'fall', amount: Math.round((fall - cfg.fall.safeHeight) * cfg.fall.damagePerPx) };
@@ -243,12 +275,55 @@ export class Character {
 
   draw(ctx, time) {
     if (this.fellOut) return;
+    if (this.admin) this.drawAura(ctx, time);
     if (this.car) { this.drawCar(ctx, time); return; }
     if (this.sprite) {
       // 온라인 참가자는 방장이 보낸 프레임 번호(netFrame)로 그린다 (내 차례에는 직접 계산)
       drawFrame(ctx, this.sprite, this.netFrame ?? this.animFrame(time), this.x, this.y + 1, this.spriteH, this.facing);
     } else this.drawPlaceholder(ctx, time);
     if (this.shield > 0 && this.alive) this.drawShield(ctx, time);
+  }
+
+  // 운영자 오오라: 금빛 후광 + 발밑 고리 + 위로 피어오르는 반짝이
+  drawAura(ctx, time) {
+    const cx = this.x, cy = this.alive ? this.y - this.spriteH * 0.48 : this.y - 14;
+    const R = this.spriteH * (this.alive ? 0.78 : 0.5) * (1 + Math.sin(time * 3) * 0.06);
+    ctx.save();
+    const g = ctx.createRadialGradient(cx, cy, R * 0.15, cx, cy, R);
+    g.addColorStop(0, 'rgba(255,236,140,0.55)');
+    g.addColorStop(0.55, 'rgba(255,200,60,0.28)');
+    g.addColorStop(1, 'rgba(255,170,40,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fill();
+    if (this.alive) {
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255,215,90,' + (0.55 + Math.sin(time * 5) * 0.25) + ')';
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y, this.spriteH * 0.36, this.spriteH * 0.09, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let k = 0; k < 6; k++) {
+        const ph = (time * 0.7 + k / 6) % 1;
+        const sx = cx + Math.sin(k * 2.4 + time * 1.3) * R * 0.7;
+        const sy = this.y - ph * this.spriteH * 1.15;
+        const sz = 3.2 * (1 - ph) + 1;
+        ctx.globalAlpha = 1 - ph;
+        ctx.fillStyle = k % 2 ? '#fff6c2' : '#ffd23f';
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - sz * 1.8);
+        ctx.lineTo(sx + sz * 0.5, sy - sz * 0.5);
+        ctx.lineTo(sx + sz * 1.8, sy);
+        ctx.lineTo(sx + sz * 0.5, sy + sz * 0.5);
+        ctx.lineTo(sx, sy + sz * 1.8);
+        ctx.lineTo(sx - sz * 0.5, sy + sz * 0.5);
+        ctx.lineTo(sx - sz * 1.8, sy);
+        ctx.lineTo(sx - sz * 0.5, sy - sz * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   drawShield(ctx, time) {

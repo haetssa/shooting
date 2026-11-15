@@ -244,9 +244,12 @@ function download(url, name) {
 }
 
 // ?batch → sheets.json 전체를 처리해 결과를 <pre id="batch-out"> 에 JSON으로 출력 (자동화용)
+// ?batch&only=id1,id2 → 지정한 캐릭터만
 async function runBatch() {
   const out = [];
+  const only = (new URLSearchParams(location.search).get('only') || '').split(',').filter(Boolean);
   for (const p of presets.sheets) {
+    if (only.length && !only.includes(p.id)) continue;
     try {
       const im = await loadImage(encodeURI(p.src));
       const r = sliceSheet(im, { targetHeight: presets.targetHeight, ...p });

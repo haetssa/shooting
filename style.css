@@ -163,11 +163,35 @@ input, select { user-select: text; -webkit-user-select: text; touch-action: mani
 .dice { display: flex; align-items: center; justify-content: center; font-size: 26px; }
 .dice.small { width: 34px; height: 34px; font-size: 20px; border-radius: 8px; background: rgba(255,255,255,0.12); }
 .card.on { border-color: #ffd23f; background: rgba(255,210,63,0.22); }
+.card.admin { box-shadow: 0 0 10px 2px rgba(255,210,63,0.55); }
 .cards.locked .card:not(.on) { opacity: 0.4; }
 .chip.kick { padding: 2px 8px; font-size: 11px; background: #ff8a8a; box-shadow: 0 2px 0 #1c1a2b; }
 
 /* 통계 */
-#stats-body { width: min(720px, 100%); display: flex; flex-direction: column; gap: 8px; padding-bottom: 20px; }
+#stats-body, #fb-body { width: min(760px, 100%); display: flex; flex-direction: column; gap: 8px; padding-bottom: 20px; }
+.stats-filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; }
+.stats-filter input[type=date] { font: 700 13px system-ui, sans-serif; padding: 4px 6px; border: 2px solid #1c1a2b; border-radius: 8px; }
+.stats-wrap { overflow-x: auto; touch-action: pan-x pan-y; }
+table.stats .up { color: #5ee27a; font-weight: 800; }
+table.stats .down { color: #ff8a8a; font-weight: 800; }
+table.stats small { opacity: 0.6; font-weight: 500; }
+.stats-title { font-weight: 900; color: #ffd23f; margin-top: 8px; text-align: left; }
+.fbitem { text-align: left; background: rgba(255,255,255,0.07); border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+.fbitem.done { opacity: 0.5; }
+.fbhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; opacity: 0.85; }
+.fbtext { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+.badge.bug { background: #ff8a8a; }
+.badge.balance { background: #8fd0ff; }
+.badge.etc { background: #c9cede; }
+.form textarea {
+  font: 600 14px system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; min-height: 110px; resize: vertical;
+  padding: 7px 10px; border: 2px solid #1c1a2b; border-radius: 10px; background: #fff; color: #1c1a2b; user-select: text; -webkit-user-select: text; touch-action: manipulation;
+}
+.chip.admin { background: #ffe27a; }
+#chat-history { max-height: 96px; overflow-y: auto; font-size: 12px; line-height: 1.4; text-align: left; touch-action: pan-y; }
+#chat-history:empty { display: none; }
+#chat-history .sys { color: #ffd23f; }
+#btn-chat.unread { background: #ffd23f; animation: ultglow 0.8s ease-in-out infinite alternate; }
 table.stats { border-collapse: collapse; width: 100%; font-size: 13px; }
 table.stats th, table.stats td { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.12); text-align: center; }
 table.stats th { color: #ffd23f; font-weight: 800; }

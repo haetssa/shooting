@@ -46,7 +46,7 @@ export function sliceSheet(img, options = {}) {
   sctx.drawImage(img, 0, 0);
   const d = sctx.getImageData(0, 0, W, H).data;
   const N = W * H;
-  if (o.grid) removeGridLines(d, W, H);
+  if (o.grid) removeGridLines(d, W, H, o.grid);
   const key = sampleBorder(d, W, H);
   if (o.grid) paintGridLines(d, W, H, key);
 
@@ -176,10 +176,13 @@ export function sliceSheet(img, options = {}) {
   return { atlas, meta, frames, report };
 }
 
-// grid 옵션: 칸 사이 흰 선(가로/세로로 길게 이어진 밝은 줄)을 찾아 표시해 두고, 배경색으로 칠한다
+// grid 옵션: 칸 사이 선(가로/세로로 길게 이어진 줄)을 찾아 표시해 두고, 배경색으로 칠한다
+// grid: true 또는 "white" = 흰 선, "dark" = 검은 선
 let gridMask = null;
-function removeGridLines(d, W, H) {
-  const white = (p) => d[p] > 215 && d[p + 1] > 215 && d[p + 2] > 215;
+function removeGridLines(d, W, H, kind) {
+  const white = kind === 'dark'
+    ? (p) => d[p] < 150 && d[p + 1] < 70 && d[p + 2] < 150
+    : (p) => d[p] > 215 && d[p + 1] > 215 && d[p + 2] > 215;
   gridMask = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) {
     let n = 0;

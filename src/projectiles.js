@@ -4,8 +4,8 @@
 import { OUTLINE as INK } from './terrain.js';
 import { roundRect as rr } from './character.js';
 
-// 추가 종류: doge | rocket | satellite | starship | iphone | balloon | nuke | mic | note | ring
-const SPIN = { dollar: 7, gpu: 9, phone: 11, blackhole: 0, doge: 8, satellite: 3, iphone: 10, balloon: 1.5, mic: 9, note: 0, ring: 12 };
+// 추가 종류: doge | rocket | satellite | starship | iphone | balloon | nuke | mic | note | ring | apple | apple_gold | pignose
+const SPIN = { dollar: 7, gpu: 9, phone: 11, blackhole: 0, doge: 8, satellite: 3, iphone: 10, balloon: 1.5, mic: 9, note: 0, ring: 12, apple: 6, apple_gold: 4, pignose: 5 };
 // 회전 대신 진행 방향을 바라보는 투사체
 const POINT = { rocket: true, starship: true, nuke: true };
 const TRAIL = {
@@ -13,6 +13,7 @@ const TRAIL = {
   doge: 'rgba(255,214,90,0.6)', rocket: 'rgba(255,170,80,0.7)', satellite: 'rgba(160,200,255,0.6)', starship: 'rgba(255,170,80,0.7)',
   iphone: 'rgba(230,230,240,0.6)', balloon: 'rgba(160,150,120,0.5)', nuke: 'rgba(255,120,60,0.7)', mic: 'rgba(255,150,220,0.6)',
   note: 'rgba(255,140,220,0.7)', ring: 'rgba(255,230,140,0.6)',
+  apple: 'rgba(255,110,100,0.6)', apple_gold: 'rgba(255,215,80,0.75)', pignose: 'rgba(255,170,190,0.65)',
 };
 
 export function drawProjectile(ctx, p) {
@@ -60,6 +61,9 @@ export function drawProjectile(ctx, p) {
     case 'mic': drawMic(ctx); break;
     case 'note': drawNote(ctx, p.age); break;
     case 'ring': drawRing(ctx); break;
+    case 'apple': drawApple(ctx, false); break;
+    case 'apple_gold': drawApple(ctx, true); break;
+    case 'pignose': drawPigNose(ctx); break;
     default: drawBall(ctx, p.color);
   }
   ctx.restore();
@@ -483,4 +487,101 @@ function drawRing(ctx) {
   ctx.fillStyle = '#bff3ff';
   ctx.fill();
   outline(ctx, 1.6);
+}
+
+// 사과 (gold: 만유인력 황금 사과, 반짝임 추가)
+function drawApple(ctx, gold) {
+  const body = gold ? '#ffd23f' : '#ff4d4d', shade = gold ? '#e0a516' : '#c9302c';
+  ctx.beginPath();
+  ctx.moveTo(0, -6);
+  ctx.bezierCurveTo(5, -11, 13, -8, 12, 1);
+  ctx.bezierCurveTo(11, 9, 5, 12, 0, 10);
+  ctx.bezierCurveTo(-5, 12, -11, 9, -12, 1);
+  ctx.bezierCurveTo(-13, -8, -5, -11, 0, -6);
+  ctx.closePath();
+  ctx.fillStyle = body;
+  ctx.fill();
+  // 그림자 한 톤
+  ctx.save();
+  ctx.clip();
+  ctx.beginPath();
+  ctx.ellipse(5, 6, 11, 8, -0.4, 0, Math.PI * 2);
+  ctx.fillStyle = shade;
+  ctx.fill();
+  ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo(0, -6);
+  ctx.bezierCurveTo(5, -11, 13, -8, 12, 1);
+  ctx.bezierCurveTo(11, 9, 5, 12, 0, 10);
+  ctx.bezierCurveTo(-5, 12, -11, 9, -12, 1);
+  ctx.bezierCurveTo(-13, -8, -5, -11, 0, -6);
+  ctx.closePath();
+  outline(ctx);
+  // 하이라이트
+  ctx.beginPath();
+  ctx.ellipse(-6, -2, 2.2, 3.6, 0.4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fill();
+  // 꼭지 + 잎
+  ctx.beginPath();
+  ctx.moveTo(0, -6);
+  ctx.quadraticCurveTo(1, -11, 3, -13);
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = '#6b4a2b';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(2, -10);
+  ctx.quadraticCurveTo(7, -15, 11, -11);
+  ctx.quadraticCurveTo(7, -8, 2, -10);
+  ctx.closePath();
+  ctx.fillStyle = '#5ec94a';
+  ctx.fill();
+  outline(ctx, 1.8);
+  if (gold) {
+    ctx.fillStyle = '#fffbe0';
+    for (const [x, y, r] of [[8, -6, 2.2], [-9, 6, 1.6]]) {
+      ctx.beginPath();
+      ctx.moveTo(x, y - r * 2);
+      ctx.lineTo(x + r * 0.6, y - r * 0.6);
+      ctx.lineTo(x + r * 2, y);
+      ctx.lineTo(x + r * 0.6, y + r * 0.6);
+      ctx.lineTo(x, y + r * 2);
+      ctx.lineTo(x - r * 0.6, y + r * 0.6);
+      ctx.lineTo(x - r * 2, y);
+      ctx.lineTo(x - r * 0.6, y - r * 0.6);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+}
+
+// 돼지코 (분홍 타원 + 콧구멍 두 개)
+function drawPigNose(ctx) {
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 13, 10, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffb3c4';
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  ctx.beginPath();
+  ctx.ellipse(4, 6, 13, 8, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#f08aa3';
+  ctx.fill();
+  ctx.restore();
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 13, 10, 0, 0, Math.PI * 2);
+  outline(ctx, 3);
+  ctx.beginPath();
+  ctx.ellipse(-3, -5, 4, 1.8, -0.2, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fill();
+  for (const sx of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(sx * 4.5, 1, 2.4, 3.6, sx * 0.15, 0, Math.PI * 2);
+    ctx.fillStyle = '#7a2e45';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+  }
 }

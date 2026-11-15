@@ -11,6 +11,7 @@
 //   split       최고점에서 여러 갈래로 분열 (count, spread)
 //   scatter     폭발 후 작은 폭탄을 흩뿌림 (count, bombletDamage, bombletRadius)
 //   pierce      depth 만큼 지형을 파고 들어가 폭발. ghost: true 면 지형을 통과하고 캐릭터에 닿을 때만 폭발
+//   uturn       delay 초 뒤 수평 방향을 반대로 꺾는다 (speedMult: 꺾은 뒤 수평 속도 배율)
 //   homing      delay 초 뒤부터 range 안의 가장 가까운 적 쪽으로 turn(rad/s) 만큼 휜다
 //   bounce      지형에 닿으면 폭발 후 한 번 튀어 올라 다시 폭발
 //   airstrike   맞은 지점 위로 투사체가 쏟아짐 (count, spread)
@@ -23,7 +24,10 @@
 //
 // 패시브 타입: damage_reduction(value 비율 감소, 음수면 증가), wind_resist(바람 배율), mana_regen(마나 회복 배율),
 //             trajectory_preview(value 초만큼 예상 궤적 표시), safe_landing(낙하 피해 없음, value = 최대 낙하 속도),
-//             skill_discount(마나 소모 value 비율 감소), regen(내 턴 시작 시 체력 value 회복)
+//             skill_discount(마나 소모 value 비율 감소), regen(내 턴 시작 시 체력 value 회복),
+//             knockback_resist(밀려나는 거리 value 비율 감소), admin(설명용, 실제 능력은 god 필드)
+//
+// 운영자 전용 캐릭터(adminOnly): god 필드 { freeSkills(마나·해금·재사용 대기·한 턴 하나 제한 없음), jumps(연속 점프 수), noFallDamage }
 
 export const WEAPON_KEYS = ['projectile', 'damage', 'radius', 'windMult', 'gravityMult', 'knockbackMult', 'fx', 'scale'];
 export const INSTANT = ['heal', 'shield', 'global', 'teleport'];
@@ -35,15 +39,21 @@ export function skillOf(c, slot) {
   return null;
 }
 
+// 운영자 캐릭터: 마나/궁극기 해금/재사용 대기/한 턴 하나 제한 없음
+export function isFree(c) {
+  return !!c?.def?.god?.freeSkills;
+}
+
 export function manaCost(c, slot) {
   const s = skillOf(c, slot);
-  if (!s) return 0;
+  if (!s || isFree(c)) return 0;
   const pv = c.def.passive;
   const disc = pv?.type === 'skill_discount' ? pv.value : 0;
   return Math.round((s.mana ?? 35) * (1 - disc));
 }
 
 export function ultLocked(c) {
+  if (isFree(c)) return false;
   return c.hits < (c.ultNeed ?? 2);
 }
 
@@ -51,6 +61,7 @@ export function ultLocked(c) {
 export function blockReason(c, slot) {
   const s = skillOf(c, slot);
   if (!s) return '없음';
+  if (isFree(c)) return null;
   if (slot === 3 && ultLocked(c)) return `기본 공격으로 ${c.ultNeed}번 맞히면 해금 (${c.hits}/${c.ultNeed})`;
   if (slot < 3 && (c.cooldowns[slot - 1] || 0) > 0) return `${c.cooldowns[slot - 1]}턴 뒤 사용 가능`;
   if (c.mana < manaCost(c, slot)) return `마나 부족 (${Math.floor(c.mana)}/${manaCost(c, slot)})`;
@@ -63,7 +74,7 @@ export function canUse(c, slot) {
 
 export function consume(c, slot, cfg) {
   const s = skillOf(c, slot);
-  if (!s) return;
+  if (!s || isFree(c)) return;
   c.mana = Math.max(0, c.mana - manaCost(c, slot));
   if (slot === 3) {
     if (cfg?.ult?.resetOnUse) c.hits = 0;
@@ -108,6 +119,11 @@ export function shotAngles(s, angle) {
 export function damageTakenMult(def) {
   const pv = def.passive;
   return pv?.type === 'damage_reduction' ? 1 - pv.value : 1;
+}
+
+export function knockbackTakenMult(def) {
+  const pv = def.passive;
+  return pv?.type === 'knockback_resist' ? 1 - pv.value : 1;
 }
 
 export function previewSeconds(c) {

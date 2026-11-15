@@ -5,10 +5,11 @@
 //   presence/{uid}            접속 중 표시 (연결 끊기면 자동 삭제) → 동시 접속 인원 계산
 //   lobby/{roomId}            방 목록용 요약 { name, hostName, hasPw, map, max, count, status, createdAt }
 //   rooms/{roomId}/meta       { name, host, hostName, hasPw, pw(해시), map, max, status, v(게임 버전) }
-//   rooms/{roomId}/players/{uid}  { name, char, ready, joinedAt }
+//   rooms/{roomId}/players/{uid}  { name, char, ready, joinedAt, admin(운영자면 true) }
 //   rooms/{roomId}/chat/{id}  { u, n, t, s(시스템), ts }
 //   rooms/{roomId}/bye/{uid}  스스로 나간 경우 표시 (강제종료와 구분)
 //   rooms/{roomId}/kicked/{uid} 방장이 강퇴한 플레이어 (다시 못 들어옴)
+//   feedback/{id}             피드백/버그 신고 { k(balance|bug|etc), t(내용), n(닉네임), v, bv, dev(mobile|pc), at, done(처리 완료) }
 //   stats/{id}                경기 결과 { v, bv, map, at, p: [{ c(캐릭터 id), w(승리 1/0), d(준 피해) }] } → 캐릭터 승률 통계
 //   rooms/{roomId}/game/start 게임 시작 정보, game/snap 상태 스냅샷, game/ev/{id} 이벤트 묶음
 //   rooms/{roomId}/input/{uid} 참가자 입력 상태
@@ -106,7 +107,7 @@ export class Online {
 
   // ---------- 방 ----------
 
-  async createRoom({ name, pw, map, max, nickname, char }) {
+  async createRoom({ name, pw, map, max, nickname, char, admin = false }) {
     const f = this.f;
     const id = f.push(this.r('lobby')).key;
     const hasPw = !!pw;
@@ -115,7 +116,7 @@ export class Online {
     await f.onDisconnect(this.r(`lobby/${id}`)).remove();
     await f.set(this.r(`rooms/${id}`), {
       meta,
-      players: { [this.uid]: { name: nickname, char, ready: true, joinedAt: f.serverTimestamp() } },
+      players: { [this.uid]: { name: nickname, char, ready: true, admin, joinedAt: f.serverTimestamp() } },
     });
     await f.set(this.r(`lobby/${id}`), { name, hostName: nickname, hasPw, map, max, count: 1, status: 'lobby', v: VERSION, createdAt: f.serverTimestamp() });
     this.room = { id, host: true };
@@ -123,7 +124,7 @@ export class Online {
   }
 
   // 반환: { ok } 또는 { error: '메시지' }
-  async joinRoom(id, pw, nickname, char) {
+  async joinRoom(id, pw, nickname, char, admin = false) {
     const f = this.f;
     const ms = await f.get(this.r(`rooms/${id}/meta`));
     if (!ms.exists()) return { error: '방이 사라졌어요.' };
@@ -138,7 +139,7 @@ export class Online {
     if (count >= meta.max) return { error: '방이 가득 찼어요.' };
     const me = this.r(`rooms/${id}/players/${this.uid}`);
     await f.onDisconnect(me).remove();
-    await f.set(me, { name: nickname, char, ready: false, joinedAt: f.serverTimestamp() });
+    await f.set(me, { name: nickname, char, ready: false, admin, joinedAt: f.serverTimestamp() });
     await f.remove(this.r(`rooms/${id}/bye/${this.uid}`)).catch(() => {});
     this.room = { id, host: false };
     return { ok: true };
@@ -231,6 +232,25 @@ export class Online {
     this.f.goOnline(this.db);
     const s = await this.f.get(this.r('stats'));
     return s.exists() ? Object.values(s.val()) : [];
+  }
+
+  // ---------- 피드백 / 버그 신고 ----------
+
+  sendFeedback(data) {
+    return this.f.push(this.r('feedback'), { ...data, at: this.f.serverTimestamp() });
+  }
+
+  // 운영자: 최신순 [{ id, ... }]
+  async fetchFeedback() {
+    await this.init();
+    this.f.goOnline(this.db);
+    const s = await this.f.get(this.r('feedback'));
+    const v = s.exists() ? s.val() : {};
+    return Object.entries(v).map(([id, x]) => ({ id, ...x })).sort((a, b) => (b.at || 0) - (a.at || 0));
+  }
+
+  setFeedbackDone(id, done) {
+    return this.f.update(this.r(`feedback/${id}`), { done });
   }
 
   sendChat(name, text, sys = false) {

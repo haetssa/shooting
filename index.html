@@ -49,6 +49,7 @@
       <button id="tut-next" class="chip small">다음</button>
     </div>
     <div id="chatbar" class="hidden">
+      <div id="chat-history"></div>
       <div class="chatrow">
         <input id="chat-input" maxlength="60" placeholder="메시지 입력" autocomplete="off">
         <button id="btn-chat-send" class="chip small">보내기</button>
@@ -69,6 +70,7 @@
           <span class="label">닉네임</span>
           <b id="my-name">-</b>
           <button id="btn-edit-name" class="chip small">변경</button>
+          <button id="admin-badge" class="chip small admin hidden" title="운영자 모드 끄기">👑 운영자</button>
         </div>
         <div class="menu">
           <button id="btn-online" class="big">🌐 온라인 대전</button>
@@ -123,9 +125,11 @@
       <section><h3>🎯 조준 도우미</h3><p>내 차례에는 <b>지난번 궤적이 흰 점선</b>으로, 지난번 파워가 게이지 위 흰 삼각형으로 보여요. 보고 조절하세요!</p></section>
       <section><h3>💧 마나 &amp; 스킬</h3><p>파란 줄이 마나. 시간이 지나면 조금씩 차고 상대를 맞히면 더 차요. 스킬 버튼을 누르면 마나를 써서 <b>다음 발사에 적용</b> (다시 누르면 취소). 한 턴에 하나만. 버튼을 <b>길게 누르면 설명</b>.</p></section>
       <section><h3>💜 궁극기</h3><p><b>기본 공격으로 상대를 2번 맞히면 해금</b>(목록에 ★ 표시), 그다음부터 마나로 사용해요.</p></section>
-      <section><h3>💥 피해</h3><p>폭발 중심에 가까울수록 큰 피해, 직접 맞히면 보너스. 높은 곳에서 떨어지면 낙하 피해가 있어요. 폭발하면 땅이 파여요.</p></section>
+      <section><h3>💥 피해</h3><p>폭발 중심에 가까울수록 큰 피해, 직접 맞히면 보너스. 맞으면 살짝 밀려나요. 높은 곳에서 떨어지면 낙하 피해가 있어요. 폭발하면 땅이 파여요.</p></section>
       <section><h3>🗺️ 맵 규칙</h3><p>도시/야경 도시: 기본 · 화성: 중력 약함 · 설원: 바람 강함 · 정글: 바람 약함 · 사막/화산: 구멍이 크게 파임 · 우주: 중력 약함, 바람 없음. 경기 시작 때 안내가 떠요.</p></section>
       <section><h3>🎲 랜덤 &amp; 히든</h3><p>캐릭터를 랜덤으로 고르면 낮은 확률로 <b>히든 캐릭터</b>가 나와요!</p></section>
+      <section><h3>💬 채팅</h3><p>온라인 게임 중 💬 버튼으로 채팅. 말하면 머리 위 말풍선 + 왼쪽 채팅 목록에 떠요. 화면 밖 사람이 말하면 화면 가장자리에 말풍선이 붙어요.</p></section>
+      <section><h3>📝 피드백 · 버그 신고</h3><p>온라인 로비나 대기실의 <b>📝 피드백</b> 버튼으로 밸런스 의견이나 버그를 보내 주세요. 제작자가 직접 읽어요!</p></section>
     </div>
   </div>
 
@@ -143,6 +147,13 @@
       <span id="lobby-count" class="sub"></span>
       <button id="btn-create-room" class="big slim">+ 방 만들기</button>
     </div>
+    <div class="row wrap">
+      <button id="btn-feedback" class="chip small">📝 피드백 · 버그 신고</button>
+      <span id="admin-tools" class="row wrap hidden">
+        <button id="btn-admin-stats" class="chip small admin">📊 승률 통계</button>
+        <button id="btn-admin-feedback" class="chip small admin">📬 피드백 확인</button>
+      </span>
+    </div>
     <div id="room-list"></div>
   </div>
 
@@ -153,6 +164,7 @@
       <div class="roomhead"><b id="room-title"></b><span id="room-info" class="sub"></span></div>
       <button id="btn-ready" class="big slim">준비</button>
       <button id="btn-go" class="big slim">GO!</button>
+      <button id="btn-room-feedback" class="chip small">📝 피드백</button>
     </div>
     <div class="roomgrid">
       <div class="roomleft">
@@ -173,10 +185,16 @@
     </div>
   </div>
 
-  <!-- 캐릭터 통계 (?screen=stats) -->
+  <!-- 캐릭터 통계 (운영자: 로비 → 승률 통계, 개발용 ?screen=stats) -->
   <div id="screen-stats" class="overlay scroll hidden">
     <div class="setup-head"><button id="btn-stats-back" class="chip small">← 뒤로</button><h2>캐릭터 승률 통계</h2></div>
     <div id="stats-body"></div>
+  </div>
+
+  <!-- 피드백 확인 (운영자) -->
+  <div id="screen-feedback" class="overlay scroll hidden">
+    <div class="setup-head"><button id="btn-fb-back" class="chip small">← 뒤로</button><h2>피드백 · 버그 신고</h2><button id="btn-fb-reload" class="chip small">↻ 새로고침</button></div>
+    <div id="fb-body"></div>
   </div>
 
   <!-- 결과 -->

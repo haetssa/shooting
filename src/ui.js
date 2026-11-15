@@ -71,7 +71,7 @@ export class HUD {
     this.drawMinimap(ctx, game, w, h);
     this.drawWind(ctx, game.wind, wmax, w);
     this.drawPlayers(ctx, game);
-    this.drawChatLog(ctx, game);
+    this.drawChatLog(ctx, game, h);
     if (game.state === 'playing') {
       this.drawTimer(ctx, game, w);
       this.drawGauge(ctx, game, w, h);
@@ -154,43 +154,83 @@ export class HUD {
     ctx.globalAlpha = 1;
   }
 
-  // 채팅 말풍선 (머리 위)
+  // 채팅 말풍선 (머리 위). 말한 캐릭터가 화면 밖이면 화면 가장자리에 붙이고 그쪽을 가리키는 꼬리를 단다
   drawBubbles(ctx, game) {
+    const W = game.cw, H = game.ch;
     for (const c of game.chars) {
       const b = c.uid && game.bubbles[c.uid];
       if (!b || c.fellOut) continue;
       const p = game.camera.worldToScreen(c.x, c.topY);
+      const off = p.x < 10 || p.x > W - 10 || p.y - 40 < 0 || p.y > H;
+      const str = off ? `${c.name}: ${b.text}` : b.text;
       ctx.font = `700 12px ${FONT}`;
-      const tw = Math.min(180, ctx.measureText(b.text).width);
-      const bw = tw + 16, bh = 22, bx = p.x - bw / 2, by = p.y - 74;
+      const tw = Math.min(200, ctx.measureText(str).width);
+      const bw = tw + 16, bh = 22;
+      let ax = p.x, ay = p.y - 74 + bh + 6; // 꼬리 끝
+      let bx = p.x - bw / 2, by = p.y - 74;
+      if (off) {
+        // 화면 가장자리 (위쪽 HUD와 아래 버튼을 피해서)
+        const top = 64, bottom = H - 120, left = 190, right = W - 80;
+        bx = clamp(p.x - bw / 2, left, right - bw);
+        by = clamp(p.y - 74, top, bottom - bh);
+        ax = clamp(p.x, bx - 10, bx + bw + 10);
+        ay = clamp(p.y - 40, by - 10, by + bh + 10);
+      }
       ctx.globalAlpha = Math.min(1, b.t);
       rr(ctx, bx, by, bw, bh, 9);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = off ? '#fff8dc' : '#ffffff';
       ctx.fill();
       ctx.lineWidth = 2;
-      ctx.strokeStyle = INK;
+      ctx.strokeStyle = off ? c.color : INK;
       ctx.stroke();
+      // 꼬리: 말풍선 가장자리에서 캐릭터 쪽으로
+      const mx = clamp(ax, bx + 8, bx + bw - 8), my = clamp(ay, by + 6, by + bh - 6);
+      const vx = ax - mx, vy = ay - my, len = Math.hypot(vx, vy) || 1;
+      const nx = -vy / len * 5, ny = vx / len * 5;
+      const ex = off ? mx + (vx / len) * 12 : p.x, ey = off ? my + (vy / len) * 12 : by + bh + 6;
+      const sx0 = off ? mx : p.x, sy0 = off ? my : by + bh - 1;
       ctx.beginPath();
-      ctx.moveTo(p.x - 5, by + bh);
-      ctx.lineTo(p.x + 5, by + bh);
-      ctx.lineTo(p.x, by + bh + 6);
+      ctx.moveTo(sx0 + (off ? nx : -5), sy0 + (off ? ny : 0));
+      ctx.lineTo(sx0 - (off ? nx : -5), sy0 - (off ? ny : 0));
+      ctx.lineTo(ex, ey);
       ctx.closePath();
       ctx.fill();
+      if (off) { ctx.stroke(); }
       ctx.fillStyle = INK;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(b.text, p.x, by + bh / 2 + 1, 180);
+      ctx.fillText(str, bx + bw / 2, by + bh / 2 + 1, 200);
       ctx.globalAlpha = 1;
     }
   }
 
-  // 최근 채팅 몇 줄 (플레이어 목록 아래)
-  drawChatLog(ctx, game) {
-    let y = 14 + game.chars.length * 26;
-    for (const m of game.chatLog) {
+  // 최근 채팅 몇 줄 (플레이어 목록 아래, 반투명 배경 + 플레이어 색 이름). 아래쪽 이동 버튼은 가리지 않는다
+  drawChatLog(ctx, game, h) {
+    let y = 16 + game.chars.length * 26;
+    const maxY = h - 96;
+    const list = game.chatLog.slice();
+    while (list.length && y + list.length * 19 > maxY) list.shift();
+    for (const m of list) {
       ctx.globalAlpha = Math.min(1, m.t);
-      text(ctx, `${m.name}: ${m.text}`, 10, y, 11, m.sys ? '#ffd23f' : '#ffffff', 'left', 700);
-      y += 16;
+      ctx.font = `800 12px ${FONT}`;
+      const name = m.sys ? '' : `${m.admin ? '👑' : ''}${m.name}: `;
+      const nw = ctx.measureText(name).width;
+      ctx.font = `600 12px ${FONT}`;
+      const tw = Math.min(250 - nw, ctx.measureText(m.text).width);
+      rr(ctx, 8, y - 8, nw + tw + 14, 17, 7);
+      ctx.fillStyle = 'rgba(20,22,40,0.62)';
+      ctx.fill();
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      if (name) {
+        ctx.font = `800 12px ${FONT}`;
+        ctx.fillStyle = m.color || '#ffffff';
+        ctx.fillText(name, 15, y + 1);
+      }
+      ctx.font = `600 12px ${FONT}`;
+      ctx.fillStyle = m.sys ? '#ffd23f' : '#ffffff';
+      ctx.fillText(m.text, 15 + nw, y + 1, 250 - nw);
+      y += 19;
     }
     ctx.globalAlpha = 1;
   }
@@ -227,8 +267,23 @@ export class HUD {
         ctx.fillRect(p.x - bw / 2 + 1, y + 1, (bw - 2) * r, 4);
       }
       text(ctx, c.name, p.x, y - 10, 12, c.alive ? c.color : '#9aa0ad', 'center');
+      const tagH = c.admin ? 16 : 0;
+      if (c.admin) {
+        ctx.font = `900 10px ${FONT}`;
+        const tw = ctx.measureText('👑 제작자').width + 12;
+        rr(ctx, p.x - tw / 2, y - 33, tw, 14, 7);
+        ctx.fillStyle = '#ffd23f';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = INK;
+        ctx.stroke();
+        ctx.fillStyle = INK;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('👑 제작자', p.x, y - 25.5);
+      }
       if (c === cur) {
-        const by = y - 30 + Math.sin(game.time * 6) * 3;
+        const by = y - 30 - tagH + Math.sin(game.time * 6) * 3;
         ctx.beginPath();
         ctx.moveTo(p.x - 8, by - 8);
         ctx.lineTo(p.x + 8, by - 8);
@@ -302,8 +357,8 @@ export class HUD {
       ctx.lineWidth = 2;
       ctx.strokeStyle = INK;
       ctx.stroke();
-      const nm = c.name.length > 6 ? c.name.slice(0, 5) + '…' : c.name;
-      text(ctx, nm, 31, y + 11, 12, c.alive ? '#fff' : '#888', 'left', 700);
+      const nm = (c.admin ? '👑' : '') + (c.name.length > 6 ? c.name.slice(0, 5) + '…' : c.name);
+      text(ctx, nm, 31, y + 11, 12, c.alive ? (c.admin ? '#ffe27a' : '#fff') : '#888', 'left', 700);
       const r = c.hp / c.maxHp;
       rr(ctx, 104, y + 7, 64, 8, 3);
       ctx.fillStyle = INK;

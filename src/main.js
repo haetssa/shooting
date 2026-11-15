@@ -18,13 +18,14 @@ import { drawProjectile } from './projectiles.js';
 import { loadSprite, makePortrait } from './sprites.js';
 import {
   skillOf, canUse, blockReason, consume, tickCooldowns, makeWeapon, shotAngles, previewSeconds,
-  gainMana, manaRegenMult, manaCost, ultLocked, INSTANT,
+  gainMana, manaRegenMult, manaCost, ultLocked, isFree, INSTANT,
 } from './skills.js';
 import { planShot } from './bot.js';
 import { GameAudio } from './audio.js';
 import { HostSync, ClientSync } from './net/sync.js';
 import { Screens } from './screens.js';
 import { Tutorial } from './tutorial.js';
+import { visibleIndices } from './roster.js';
 
 const STEP = 1 / 60;
 export const PLAYER_COLORS = ['#ff5a5f', '#3fa7ff', '#ffd23f', '#5ee27a', '#c77dff', '#ff9f43'];
@@ -117,7 +118,7 @@ class Game {
     if (q.get('autostart')) {
       const n = +q.get('autostart') || 2, demo = q.has('demo');
       const pick = (q.get('chars') || '').split(',').filter(Boolean).map(Number); // &chars=4,5,6,7
-      this.startMatch(Array.from({ length: n }, (_, i) => ({ name: demo ? `봇 ${i + 1}` : `플레이어 ${i + 1}`, char: pick.length ? pick[i % pick.length] : i % this.charDefs.length, bot: demo ? 2 : 0 })), { mapId: q.get('map') || undefined });
+      this.startMatch(Array.from({ length: n }, (_, i) => ({ name: demo ? `봇 ${i + 1}` : `플레이어 ${i + 1}`, char: pick.length ? pick[i % pick.length] : i % this.charDefs.length, bot: demo ? 2 : 0, admin: i === 0 && q.has('admin') })), { mapId: q.get('map') || undefined });
     }
     const ff = +q.get('ff') || 0;
     for (let i = 0; i < ff * 60; i++) this.update(STEP);
@@ -220,7 +221,7 @@ class Game {
 
   // ---------- 경기 시작/종료 ----------
 
-  // players: [{ name, char(인덱스), bot, uid }], opts: { mapId, seed, mode, tutorial }
+  // players: [{ name, char(인덱스), bot, uid, admin(운영자: 오오라 표시) }], opts: { mapId, seed, mode, tutorial }
   startMatch(players, opts = {}) {
     this.mode = opts.mode || 'local';
     this.rng = mulberry32(opts.seed ?? newSeed());
@@ -232,7 +233,8 @@ class Game {
     this.chars = [];
     for (let i = 0; i < n; i++) {
       const p = players[i], ci = p.char;
-      const c = new Character(this.charDefs[ci], { id: i, uid: p.uid, name: p.name, color: PLAYER_COLORS[i % PLAYER_COLORS.length], bot: p.bot }, this.sprites[ci]);
+      const c = new Character(this.charDefs[ci], { id: i, uid: p.uid, name: p.name, color: PLAYER_COLORS[i % PLAYER_COLORS.length], bot: p.bot, admin: p.admin }, this.sprites[ci]);
+      c.setHitbox(this.cfg.hitbox);
       c.angle = this.cfg.aim.default;
       c.mana = this.cfg.mana.start;
       c.ultNeed = this.cfg.ult.unlockHits;
@@ -274,16 +276,17 @@ class Game {
 
   startTutorial(char = 0) {
     const nick = this.screens.nick;
-    const botChar = (char + 3) % this.charDefs.filter((d) => !d.hidden).length;
+    const vis = visibleIndices(this.charDefs);
+    const botChar = vis[(Math.max(0, vis.indexOf(char)) + 3) % vis.length];
     this.startMatch([
-      { name: nick, char, bot: 0, hpMult: 1.5 },
+      { name: nick, char, bot: 0, hpMult: 1.5, admin: this.screens.isAdmin },
       { name: '연습 봇', char: botChar, bot: 1 },
     ], { mapId: 'city_01', tutorial: true });
   }
 
   startOnline(start, mode, online) {
     this.myUid = online.uid;
-    const players = start.players.map((p) => ({ name: p.name, char: p.char, bot: 0, uid: p.uid }));
+    const players = start.players.map((p) => ({ name: p.name, char: p.char, bot: 0, uid: p.uid, admin: !!p.admin }));
     this.startMatch(players, { mapId: start.map, seed: start.seed, mode });
     this.sync = mode === 'host' ? new HostSync(online, this) : new ClientSync(online, this);
     if (this.devOnlineBots && mode === 'host') for (const c of this.chars) { c.botLevel = 2; c.isBot = true; } // 개발용
@@ -371,10 +374,12 @@ class Game {
 
   // ---------- 채팅 표시 ----------
 
+  // 게임 중 채팅: 머리 위 말풍선(화면 밖이면 화면 가장자리에 방향 표시) + 왼쪽 채팅 목록
   say(uid, name, text, sys = false) {
-    if (!sys && uid) this.bubbles[uid] = { text, t: 4 };
-    this.chatLog.push({ name, text, sys, t: 7 });
-    if (this.chatLog.length > 4) this.chatLog.shift();
+    const c = uid ? this.chars.find((ch) => ch.uid === uid) : null;
+    if (!sys && uid) this.bubbles[uid] = { text, t: 5 };
+    this.chatLog.push({ name, text, sys, t: 10, color: c?.color || null, admin: !!c?.admin });
+    if (this.chatLog.length > 5) this.chatLog.shift();
   }
 
   updateChat(dt) {
@@ -400,7 +405,7 @@ class Game {
       if (!s) return;
       if (this.targeting === slot) { this.targeting = 0; this.audio.play('click'); return; }
       if (cl.armed === slot) { cl.armed = 0; this.armed = 0; this.audio.play('click'); return; }
-      if (this.turnSkill || cl.usedInstant) { this.hud.showBanner('스킬은 한 턴에 하나만 쓸 수 있어요', '#ffb84d'); return; }
+      if (!isFree(c) && (this.turnSkill || cl.usedInstant)) { this.hud.showBanner('스킬은 한 턴에 하나만 쓸 수 있어요', '#ffb84d'); return; }
       const why = blockReason(c, slot);
       if (why) { this.hud.showBanner(why, '#ffb84d'); return; }
       if (s.type === 'teleport') { this.targeting = slot; this.hud.showBanner('순간이동할 곳을 터치하세요', '#d9a6ff'); this.audio.play('arm'); return; }
@@ -412,7 +417,7 @@ class Game {
     }
     if (this.targeting === slot) { this.targeting = 0; this.audio.play('click'); return; }
     if (this.armed !== slot) {
-      if (this.turnSkill) { this.hud.showBanner('스킬은 한 턴에 하나만 쓸 수 있어요', '#ffb84d'); return; }
+      if (this.turnSkill && !isFree(c)) { this.hud.showBanner('스킬은 한 턴에 하나만 쓸 수 있어요', '#ffb84d'); return; }
       const why = blockReason(c, slot);
       if (why) { this.hud.showBanner(why, '#ffb84d'); return; }
     }
@@ -422,7 +427,7 @@ class Game {
   // 방장/로컬에서 스킬 실제 발동. target = 순간이동 위치 { x, y }
   activateSkill(c, slot, target) {
     if (this.armed === slot) { this.armed = 0; this.sfx('click'); return; }
-    if (this.turnSkill || !canUse(c, slot)) return;
+    if ((this.turnSkill && !isFree(c)) || !canUse(c, slot)) return;
     const s = skillOf(c, slot);
     switch (s.type) {
       case 'heal': {
@@ -801,8 +806,8 @@ class Game {
     if (!t.charging) {
       if (c.grounded) {
         if (dir && c.walk(dir, dt, this.terrain, cfg.move)) this.tutorial?.note('walk', cfg.move.speed * dt);
-        if (inp.jump && c.jump(cfg.move, dir)) { this.sfx('jump'); this.tutorial?.note('jump'); }
       } else c.airDir = dir;
+      if (inp.jump && c.jump(cfg.move, dir)) { this.sfx('jump'); this.tutorial?.note('jump'); }
     }
     const before = c.angle;
     c.angle = clamp(c.angle + inp.aimDragPx * a.dragSensitivity + this.input.angleAxis * a.keySpeed * dt, a.min, a.max);
@@ -862,7 +867,7 @@ class Game {
       const want = n.ar || 0;
       if (want !== this.armed) {
         if (!want) this.armed = 0;
-        else if (!this.turnSkill && canUse(c, want) && !INSTANT.includes(skillOf(c, want)?.type)) { this.armed = want; this.sfx(want === 3 ? 'ult' : 'arm'); }
+        else if ((!this.turnSkill || isFree(c)) && canUse(c, want) && !INSTANT.includes(skillOf(c, want)?.type)) { this.armed = want; this.sfx(want === 3 ? 'ult' : 'arm'); }
       }
       const cg = !!n.cg;
       if (cg && !t.charging) this.audio.chargeStart();
@@ -1072,6 +1077,7 @@ class Game {
     c.grounded = !!a[13];
     c.vx = c.vy = 0;
     c.fallStartY = c.y;
+    c.jumpsLeft = c.maxJumps - 1;
     c.fuel = s.fu;
     c.netFrame = null;
     c.charge = null;
@@ -1123,8 +1129,8 @@ class Game {
       if (!cl.charging) {
         if (c.grounded) {
           if (dir) c.walk(dir, dt, this.terrain, cfg.move);
-          if (inp.jump && c.jump(cfg.move, dir)) { cl.j++; this.audio.play('jump'); }
         } else c.airDir = dir;
+        if (inp.jump && c.jump(cfg.move, dir)) { cl.j++; this.audio.play('jump'); }
       }
       c.angle = clamp(c.angle + inp.aimDragPx * a.dragSensitivity + this.input.angleAxis * a.keySpeed * dt, a.min, a.max);
       if (inp.skill) this.trySkill(inp.skill);
@@ -1203,11 +1209,12 @@ class Game {
       const locked = slot === 3 && s && ultLocked(c);
       let sub = '';
       if (s) {
-        if (locked) sub = `🔒 ${c.hits}/${c.ultNeed}`;
+        if (isFree(c)) sub = '무제한';
+        else if (locked) sub = `🔒 ${c.hits}/${c.ultNeed}`;
         else if (slot < 3 && c.cooldowns[slot - 1] > 0) sub = `${c.cooldowns[slot - 1]}턴 대기`;
         else sub = `💧${manaCost(c, slot)}`;
       }
-      const off = !s || !usable || (!active && (!canUse(c, slot) || this.turnSkill));
+      const off = !s || !usable || (!active && (!canUse(c, slot) || (this.turnSkill && !isFree(c))));
       const key = `${c.id}|${s?.name}|${sub}|${off}|${active}`;
       if (el.dataset.k === key) continue;
       el.dataset.k = key;

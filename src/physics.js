@@ -5,6 +5,10 @@
 // p.ghost 면 지형을 무시하고 캐릭터에만 맞는다, homing 무기는 가까운 적 쪽으로 휜다
 export function stepProjectile(p, dt, env) {
   const w = p.weapon;
+  if (w.behavior === 'uturn' && !p.turned && p.age >= (w.skill.delay ?? 0.7)) {
+    p.vx = -p.vx * (w.skill.speedMult ?? 1);
+    p.turned = true;
+  }
   if (w.behavior === 'homing' && p.age >= (w.skill.delay ?? 0.3)) steerHoming(p, dt, env);
   p.vx += env.windAccel * (w.windMult ?? 1) * dt;
   p.vy += env.gravity * (w.gravityMult ?? 1) * dt;
@@ -104,26 +108,38 @@ export function previewPath(x, y, vx, vy, weapon, env, seconds) {
 }
 
 // 폭발 피해 계산: 중심에서 멀수록 감소, 직격은 보너스
+// 거리는 캐릭터 판정 캡슐(머리~발)까지 잰다. cfg.splashBonus 만큼 피해 범위를 넓힌다
+// 넉백: 수평 방향 위주 + 일정한 작은 튀어오름 (예전엔 발밑에서 터지면 위로 크게 솟구쳐 장외로 날아갔다)
+//   cfg.knockback 기본 세기, cfg.knockUp 튀어오름 비율, cfg.knockbackMax 수평 최대 속도
 // weapon.knockbackMult 가 음수면 밀어내지 않고 끌어당긴다 (블랙홀)
 export function computeExplosion(chars, x, y, weapon, direct, cfg) {
   const out = [];
   const km = weapon.knockbackMult ?? 1;
+  const K = cfg.knockback, up = cfg.knockUp ?? 0.45, maxX = cfg.knockbackMax ?? 220;
   for (const c of chars) {
     if (!c.alive) continue;
-    const dx = c.x - x, dy = c.cy - y;
+    const ny = c.nearestY ? c.nearestY(y) : c.cy;
+    const dx = c.x - x, dy = ny - y;
     const d = Math.hypot(dx, dy);
-    const reach = weapon.radius + c.radius;
+    const reach = weapon.radius + c.radius + (cfg.splashBonus ?? 0);
     if (c !== direct && d >= reach) continue;
     const f = c === direct ? 1 : 1 - d / reach;
     const mult = c === direct ? cfg.directHitMult : cfg.splashMin + (1 - cfg.splashMin) * f;
-    const len = d || 1;
-    const kb = cfg.knockback * Math.max(f, 0.3);
-    out.push({
-      char: c,
-      damage: Math.round(weapon.damage * mult),
-      kx: (dx / len) * kb * km,
-      ky: (dy / len) * kb * km - kb * 0.5,
-    });
+    const kb = K * Math.max(f, 0.3);
+    let kx, ky;
+    if (km >= 0) {
+      const s = Math.min(km, 3);
+      const hx = d > 0 ? Math.abs(dx) / d : 0;
+      const sx = Math.abs(dx) < 3 ? 0 : Math.sign(dx);
+      const cap = maxX * Math.max(1, s);
+      kx = Math.max(-cap, Math.min(cap, sx * kb * (0.35 + 0.65 * hx) * s));
+      ky = -kb * up * Math.min(s, 1.5);
+    } else {
+      const len = d || 1;
+      kx = (dx / len) * kb * km;
+      ky = (dy / len) * kb * km - kb * 0.3;
+    }
+    out.push({ char: c, damage: Math.round(weapon.damage * mult), kx, ky });
   }
   return out;
 }
